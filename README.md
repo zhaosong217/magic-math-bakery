@@ -1,23 +1,33 @@
 # Magic Math Bakery
 
-A small educational game prototype for children aged 6–9. Customers ask for a lucky number, and the player combines ingredient cards until their values equal that target.
+Magic Math Bakery is an educational web-game prototype for children aged 7–11. Players build expressions from number cards and operation signs, serve a target number, and earn extra discovery rewards for finding structurally different strategies.
 
-## Game design goals
+## P0 gameplay
 
-- Make number composition the core mechanic, not a quiz layered on top of a game.
-- Give contextual feedback such as “you still need 3” instead of only right/wrong.
-- Introduce complexity gradually across eight short orders.
-- Reward experimentation with coins, combo bonuses, animation, and friendly coaching.
+### Bakery Adventure
 
-## Features
+Eight guided orders introduce addition, subtraction, multiplication, division, and mixed operations in stages.
 
-- Eight procedurally generated, always-solvable orders
-- Addition targets from 6 to 20
-- Adaptive hints after repeated mistakes
-- Real-time difference feedback
-- Score, combo, timer, and end-of-round summary
-- Responsive touch and keyboard-friendly controls
-- No accounts, ads, tracking, or external APIs
+### Quick Practice
+
+Players choose `+`, `−`, `×`, `÷`, or mixed operations. Every order has an individual bonus clock: early answers earn more coins, while correct overtime answers still receive credit.
+
+### Number Lab
+
+One valid recipe is enough to serve an order, but players may continue exploring. The recipe book recognises different structures, ignores commutative duplicates such as `4 + 8` and `8 + 4`, and awards bonuses for new strategy categories.
+
+## Included systems
+
+- Expression builder with standard multiplication/division precedence
+- Unique number cards that can each be used once
+- Multiple-solution recipe book
+- Per-order time, mistake, discovery, and new-strategy scoring
+- Procedural Web Audio background melody and interaction feedback
+- Sound preference saved on the current device
+- Coins, combo, order progression, and animated feedback
+- End-of-shift thinking report showing strategy use
+- Responsive touch and keyboard-accessible controls
+- Custom social preview card
 
 ## Run locally
 
@@ -26,8 +36,8 @@ npm install
 npm run dev
 ```
 
-Then open `http://localhost:3000`.
+Open [http://localhost:3000](http://localhost:3000).
 
-## Prototype scope
+## Design direction
 
-This was designed as a one-day Game Design Intern portfolio prototype. A future iteration could add subtraction recipes, teacher-selected difficulty, sound effects, and an optional AI tutor that generates age-appropriate hints without revealing the answer.
+This P0 iteration separates arithmetic fluency from flexible number thinking. Future versions can add parity, making-ten, bar models, factors, patterns, enumeration, geometry, and original competition-style reasoning puzzles.
