@@ -257,6 +257,7 @@ export default function Home() {
   const audioRef = useRef<AudioContext | null>(null);
   const musicTimerRef = useRef<number | null>(null);
   const musicStepRef = useRef(0);
+  const celebrationTimerRef = useRef<number | null>(null);
 
   const totalOrders = mode === "lab" ? TOTAL_LAB_ORDERS : TOTAL_STANDARD_ORDERS;
   const expression = expressionText(tokens);
@@ -291,6 +292,28 @@ export default function Home() {
     });
   }, [ensureAudio, soundOn]);
 
+  const playAmbientChord = useCallback((frequencies: number[]) => {
+    if (!soundOn) return;
+    const context = ensureAudio();
+    if (!context) return;
+    const startAt = context.currentTime;
+    frequencies.forEach((frequency, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const filter = context.createBiquadFilter();
+      oscillator.type = index === 0 ? "sine" : "triangle";
+      oscillator.frequency.value = frequency;
+      filter.type = "lowpass";
+      filter.frequency.value = 920;
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(index === 0 ? 0.009 : 0.0045, startAt + 0.9);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 4.2);
+      oscillator.connect(filter).connect(gain).connect(context.destination);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + 4.3);
+    });
+  }, [ensureAudio, soundOn]);
+
   const stopMusic = useCallback(() => {
     if (musicTimerRef.current !== null) window.clearInterval(musicTimerRef.current);
     musicTimerRef.current = null;
@@ -299,14 +322,19 @@ export default function Home() {
   const startMusic = useCallback(() => {
     stopMusic();
     if (!soundOn || phase !== "playing") return;
-    const notes = [261.63, 329.63, 392, 329.63, 293.66, 349.23, 440, 349.23];
+    const chords = [
+      [130.81, 196, 246.94, 329.63],
+      [110, 164.81, 220, 261.63],
+      [146.83, 220, 261.63, 349.23],
+      [98, 146.83, 196, 246.94],
+    ];
     const playNext = () => {
-      playTone([notes[musicStepRef.current % notes.length]], 0.38, 0.018);
+      playAmbientChord(chords[musicStepRef.current % chords.length]);
       musicStepRef.current += 1;
     };
     playNext();
-    musicTimerRef.current = window.setInterval(playNext, 620);
-  }, [phase, playTone, soundOn, stopMusic]);
+    musicTimerRef.current = window.setInterval(playNext, 4800);
+  }, [phase, playAmbientChord, soundOn, stopMusic]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("magic-math-sound");
@@ -321,6 +349,7 @@ export default function Home() {
   useEffect(() => {
     return () => {
       stopMusic();
+      if (celebrationTimerRef.current !== null) window.clearTimeout(celebrationTimerRef.current);
       void audioRef.current?.close();
     };
   }, [stopMusic]);
@@ -330,7 +359,7 @@ export default function Home() {
     const timer = window.setInterval(() => {
       setOrderTimeLeft((value) => {
         const next = Math.max(-30, value - 1);
-        if (next > 0 && next <= 5) playTone([440], 0.08, 0.025);
+        if (next === 5) playTone([392, 523], 0.22, 0.018);
         return next;
       });
     }, 1000);
@@ -464,6 +493,14 @@ export default function Home() {
     playTone([659, 784], 0.14, 0.04);
   }
 
+  function exitToMenu() {
+    if (celebrationTimerRef.current !== null) window.clearTimeout(celebrationTimerRef.current);
+    celebrationTimerRef.current = null;
+    setCelebrating(false);
+    setTokens([]);
+    setPhase("menu");
+  }
+
   function serveOrder() {
     if (!foundRecipes.length || celebrating) return;
     const nextCombo = combo + 1;
@@ -472,7 +509,8 @@ export default function Home() {
     setOrdersServed((value) => value + 1);
     setCelebrating(true);
     playTone([523, 659, 784], 0.25, 0.06);
-    window.setTimeout(() => {
+    celebrationTimerRef.current = window.setTimeout(() => {
+      celebrationTimerRef.current = null;
       if (round >= totalOrders) {
         setPhase("finished");
         setCelebrating(false);
@@ -497,7 +535,7 @@ export default function Home() {
       <div className="cloud cloud-one" />
       <div className="cloud cloud-two" />
       <header className="brand-bar">
-        <button className="brand-button" onClick={() => phase !== "playing" && setPhase("menu")} aria-label="Magic Math Bakery home">
+        <button className="brand-button" onClick={() => phase === "playing" ? exitToMenu() : setPhase("menu")} aria-label="Magic Math Bakery home">
           <span className="brand-mark" aria-hidden="true">✦</span>
           <span><small>NUMBER QUEST</small><strong>Magic Math Bakery</strong></span>
         </button>
@@ -555,6 +593,7 @@ export default function Home() {
       {phase === "playing" && (
         <section className={`play-area ${celebrating ? "is-celebrating" : ""}`} aria-live="polite">
           <div className="hud">
+            <button className="exit-button" onClick={exitToMenu} aria-label="Exit the current game and return to the main menu">← Exit to menu</button>
             <div className="hud-stat"><span>COINS</span><strong>★ {score}</strong></div>
             <div className="progress-wrap">
               <div className="progress-label"><span>{titleForMode.toUpperCase()} · ORDER {round} OF {totalOrders}</span><span>{Math.round(progress)}%</span></div>
@@ -602,7 +641,10 @@ export default function Home() {
             <div className={`coach-bar ${messageTone}`}>
               <div className="coach-icon" aria-hidden="true">👩🏽‍🍳</div><div><span>CHEF MIRA SAYS</span><p>{message}</p></div>
               <div className="coach-buttons">
-                {!recipeSolved && <button className="serve-button" onClick={checkRecipe} disabled={!tokens.length}>Check recipe</button>}
+                {!recipeSolved && <>
+                  {foundRecipes.length > 0 && <button className="secondary-button" onClick={serveOrder}>Finish exploring →</button>}
+                  <button className="serve-button" onClick={checkRecipe} disabled={!tokens.length}>Check recipe</button>
+                </>}
                 {recipeSolved && <><button className="secondary-button" onClick={findAnotherWay}>Find another way</button><button className="serve-button" onClick={serveOrder}>Serve now →</button></>}
               </div>
             </div>

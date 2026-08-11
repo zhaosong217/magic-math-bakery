@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
@@ -25,4 +26,11 @@ test("server-renders the P0 Magic Math Bakery menu", async () => {
   assert.match(html, /Music on/);
   assert.match(html, /og\.png/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
+});
+
+test("P0.1 keeps safe exits available during play", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /Exit to menu/);
+  assert.match(source, /Finish exploring/);
+  assert.match(source, /setInterval\(playNext, 4800\)/);
 });
