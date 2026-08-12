@@ -51,6 +51,9 @@ export default defineConfig(async () => {
       vinext(),
       sites(),
       cloudflare({
+        // The Worker inspector is not needed for this game and may be blocked
+        // by sandboxed/local environments before the web server can start.
+        inspectorPort: false,
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         config: localBindingConfig,
       }),

@@ -46,3 +46,8 @@ test("First Light Particles web audio asset is bundled", async () => {
   assert.ok(audio.size > 1_000_000);
   assert.ok(audio.size < 3_000_000);
 });
+
+test("local development does not require a Worker inspector port", async () => {
+  const config = await readFile(new URL("../vite.config.ts", import.meta.url), "utf8");
+  assert.match(config, /inspectorPort:\s*false/);
+});

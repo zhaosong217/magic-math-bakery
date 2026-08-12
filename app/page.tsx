@@ -308,8 +308,6 @@ export default function Home() {
   const labRightWeight = labPuzzle.rightBase + labPuzzle.pieces
     .filter((piece) => labPlacements[piece.id] === "right")
     .reduce((sum, piece) => sum + piece.weight, 0);
-  const labAllPlaced = labPuzzle.pieces.every((piece) => labPlacements[piece.id]);
-  const labBalanced = labAllPlaced && labLeftWeight === labRightWeight;
 
   const ensureAudio = useCallback(() => {
     if (!audioRef.current && typeof window !== "undefined") audioRef.current = new AudioContext();
@@ -357,7 +355,9 @@ export default function Home() {
 
   useEffect(() => {
     const stored = window.localStorage.getItem("magic-math-sound");
-    if (stored === "off") setSoundOn(false);
+    if (stored !== "off") return;
+    const timer = window.setTimeout(() => setSoundOn(false), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -533,24 +533,32 @@ export default function Home() {
 
   function placeLabPiece(side: "left" | "right") {
     if (!selectedLabPiece || recipeSolved) return;
-    setLabPlacements((current) => ({ ...current, [selectedLabPiece]: side }));
-    setLabMoves((value) => value + 1);
+    const nextPlacements = { ...labPlacements, [selectedLabPiece]: side };
+    const nextMoves = labMoves + 1;
+    const nextLeft = labPuzzle.leftBase + labPuzzle.pieces
+      .filter((piece) => nextPlacements[piece.id] === "left")
+      .reduce((sum, piece) => sum + piece.weight, 0);
+    const nextRight = labPuzzle.rightBase + labPuzzle.pieces
+      .filter((piece) => nextPlacements[piece.id] === "right")
+      .reduce((sum, piece) => sum + piece.weight, 0);
+    const allPlaced = labPuzzle.pieces.every((piece) => nextPlacements[piece.id]);
+    setLabPlacements(nextPlacements);
+    setLabMoves(nextMoves);
     setSelectedLabPiece(null);
-    setMessage("Watch the oven tilt. Place every ingredient and make both pans level.");
     playTone([440, 554], 0.12, 0.03);
+    if (allPlaced && nextLeft === nextRight) {
+      const points = Math.max(50, 180 - Math.max(0, nextMoves - labPuzzle.moves) * 15);
+      setRecipeSolved(true);
+      setDishStage("ready");
+      setScore((value) => value + points);
+      setStrategyCounts((current) => ({ ...current, "Balance thinking": (current["Balance thinking"] ?? 0) + 1 }));
+      setMessage(`Perfect balance! The oven is level. +${points} coins — bake your dish.`);
+      setMessageTone("good");
+      playTone([392, 523, 659], 0.25, 0.05);
+      return;
+    }
+    setMessage("Watch the oven tilt. Place every ingredient and make both pans level.");
   }
-
-  useEffect(() => {
-    if (mode !== "lab" || phase !== "playing" || recipeSolved || !labBalanced) return;
-    const points = Math.max(50, 180 - Math.max(0, labMoves - labPuzzle.moves) * 15);
-    setRecipeSolved(true);
-    setDishStage("ready");
-    setScore((value) => value + points);
-    setStrategyCounts((current) => ({ ...current, "Balance thinking": (current["Balance thinking"] ?? 0) + 1 }));
-    setMessage(`Perfect balance! The oven is level. +${points} coins — bake your dish.`);
-    setMessageTone("good");
-    playTone([392, 523, 659], 0.25, 0.05);
-  }, [labBalanced, labMoves, labPuzzle.moves, mode, phase, playTone, recipeSolved]);
 
   function checkRecipe() {
     const value = evaluateExpression(tokens);
@@ -834,7 +842,7 @@ export default function Home() {
                 <div className="book-title"><span>RECIPE BOOK</span><strong>{foundRecipes.length} discovered</strong></div>
                 <div className="recipe-list">
                   {foundRecipes.length === 0 && <div className="empty-recipe"><span>☆</span><p>Your first correct expression will be saved here.</p></div>}
-                  {foundRecipes.map((recipe, index) => <div className="saved-recipe" key={recipe.signature}><span>★</span><div><small>{recipe.category}</small><strong>{recipe.expression} = {order.target}</strong></div><i>+{recipe.points}</i></div>)}
+                  {foundRecipes.map((recipe) => <div className="saved-recipe" key={recipe.signature}><span>★</span><div><small>{recipe.category}</small><strong>{recipe.expression} = {order.target}</strong></div><i>+{recipe.points}</i></div>)}
                 </div>
                 <div className="strategy-hints"><span>TRY A NEW STRUCTURE</span><div>{["Pair", "3+ cards", "Subtract", "Multiply", "Divide", "Mixed"].map((label) => <i key={label}>{label}</i>)}</div></div>
               </aside>
