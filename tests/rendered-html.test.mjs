@@ -43,6 +43,10 @@ test("P0.1 includes guided inputs, delivery, lab play, and safe exits", async ()
   assert.match(source, /Clear all/);
   assert.match(source, /Next puzzle/);
   assert.match(source, /advanceLabPuzzle/);
+  assert.match(source, /endlessLabDifficulty/);
+  assert.match(source, /seenLabPuzzlesRef/);
+  assert.match(source, /sessionSeed/);
+  assert.doesNotMatch(source, /labBlueprints/);
   assert.doesNotMatch(source, /playAmbientChord|setInterval\(playNext/);
 });
 

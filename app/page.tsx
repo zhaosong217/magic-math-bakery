@@ -40,6 +40,7 @@ type Order = {
 
 type LabPiece = { id: string; weight: number; emoji: string; name: string };
 type LabPuzzle = { leftBase: number; rightBase: number; pieces: LabPiece[]; moves: number };
+type LabDifficulty = { minPieces: number; maxPieces: number; maxWeight: number; maxBase: number };
 
 const sessionLevels: Record<SessionLevel, { title: string; orders: number | null; note: string }> = {
   apprentice: { title: "Apprentice", orders: 6, note: "6 gentle orders" },
@@ -84,14 +85,11 @@ const operatorInfo: Record<Operator, { operation: Exclude<Operation, "mixed">; t
 const allOperators = Object.keys(operatorInfo) as Operator[];
 const dishes = ["🧁", "🍰", "🥧", "🍮", "🍩", "🥐"];
 
-const labBlueprints: Array<Omit<LabPuzzle, "pieces"> & { weights: number[] }> = [
-  { leftBase: 4, rightBase: 1, weights: [1, 2, 4], moves: 5 },
-  { leftBase: 2, rightBase: 5, weights: [1, 2, 4], moves: 5 },
-  { leftBase: 6, rightBase: 2, weights: [1, 1, 2, 4], moves: 6 },
-  { leftBase: 3, rightBase: 8, weights: [1, 2, 2, 4], moves: 7 },
-  { leftBase: 7, rightBase: 2, weights: [1, 2, 4, 4], moves: 7 },
-  { leftBase: 4, rightBase: 9, weights: [1, 2, 2, 4], moves: 7 },
-];
+const labDifficulty: Record<Exclude<SessionLevel, "endless">, LabDifficulty> = {
+  apprentice: { minPieces: 3, maxPieces: 4, maxWeight: 3, maxBase: 8 },
+  baker: { minPieces: 4, maxPieces: 5, maxWeight: 4, maxBase: 12 },
+  master: { minPieces: 5, maxPieces: 6, maxWeight: 5, maxBase: 15 },
+};
 
 function randomInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -174,19 +172,72 @@ function createStandardOrder(round: number, operation: Operation, operators = al
   };
 }
 
-function createLabPuzzle(round: number): LabPuzzle {
-  const blueprint = labBlueprints[(round - 1) % labBlueprints.length];
-  return {
-    leftBase: blueprint.leftBase,
-    rightBase: blueprint.rightBase,
-    moves: Math.max(4, blueprint.moves - Math.floor((round - 1) / labBlueprints.length)),
-    pieces: shuffle(blueprint.weights).map((weight, index) => ({
-      id: `lab-${round}-${index}-${weight}`,
-      weight,
-      emoji: ingredientStyles[index % ingredientStyles.length].emoji,
-      name: ingredientStyles[index % ingredientStyles.length].name,
-    })),
+function labPuzzleSignature(puzzle: LabPuzzle) {
+  const bases = [puzzle.leftBase, puzzle.rightBase].sort((a, b) => a - b).join(",");
+  const weights = puzzle.pieces.map((piece) => piece.weight).sort((a, b) => a - b).join(",");
+  return `${bases}|${weights}`;
+}
+
+function seededRandom(seed: number) {
+  let value = seed >>> 0;
+  return () => {
+    value += 0x6D2B79F5;
+    let result = value;
+    result = Math.imul(result ^ (result >>> 15), result | 1);
+    result ^= result + Math.imul(result ^ (result >>> 7), result | 61);
+    return ((result ^ (result >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+function endlessLabDifficulty(round: number): LabDifficulty {
+  const stage = Math.floor((round - 1) / 4);
+  return {
+    minPieces: Math.min(6, 4 + Math.floor(stage / 3)),
+    maxPieces: Math.min(7, 5 + Math.floor(stage / 2)),
+    maxWeight: Math.min(5, 3 + Math.floor(stage / 2)),
+    maxBase: Math.min(18, 10 + stage),
+  };
+}
+
+function createLabPuzzle(round: number, level: SessionLevel, seen = new Set<string>(), sessionSeed = 0): LabPuzzle {
+  const difficulty = level === "endless" ? endlessLabDifficulty(round) : labDifficulty[level];
+  const levelSeed = { apprentice: 1103, baker: 2207, master: 3313, endless: 4421 }[level];
+
+  for (let attempt = 0; attempt < 1000; attempt += 1) {
+    const random = seededRandom(levelSeed + sessionSeed * 65537 + round * 104729 + attempt * 8191);
+    const pieceCount = difficulty.minPieces
+      + Math.floor(random() * (difficulty.maxPieces - difficulty.minPieces + 1));
+    const weights = Array.from(
+      { length: pieceCount },
+      () => 1 + Math.floor(random() * difficulty.maxWeight),
+    );
+    // Assign by index so duplicate weights are still treated as separate food groups.
+    const assignments = weights.map(() => random() < 0.5 ? "left" : "right");
+    const leftCount = assignments.filter((side) => side === "left").length;
+    const rightCount = assignments.length - leftCount;
+    if (!leftCount || !rightCount) continue;
+    const leftAdded = weights.reduce((sum, weight, index) => sum + (assignments[index] === "left" ? weight : 0), 0);
+    const rightAdded = weights.reduce((sum, weight, index) => sum + (assignments[index] === "right" ? weight : 0), 0);
+    const difference = Math.abs(leftAdded - rightAdded);
+    if (!difference || difference >= difficulty.maxBase) continue;
+
+    const slack = 1 + Math.floor(random() * (difficulty.maxBase - difference));
+    const targetWeight = Math.max(leftAdded, rightAdded) + slack;
+    const puzzle: LabPuzzle = {
+      leftBase: targetWeight - leftAdded,
+      rightBase: targetWeight - rightAdded,
+      moves: pieceCount + (level === "apprentice" ? 2 : 1),
+      pieces: weights.map((weight, index) => ({
+        id: `lab-${level}-${round}-${index}-${weight}`,
+        weight,
+        ...ingredientStyles[(index + round + levelSeed) % ingredientStyles.length],
+      })),
+    };
+    if (!seen.has(labPuzzleSignature(puzzle))) return puzzle;
+  }
+
+  // The generated space is very large; this is only a defensive fallback.
+  return createLabPuzzle(round + 10000, level, new Set(), sessionSeed);
 }
 
 function createOrder(round: number, mode: Exclude<Mode, "lab">, practiceOperators: Operator[]) {
@@ -267,7 +318,7 @@ export default function Home() {
   const [sessionLevel, setSessionLevel] = useState<SessionLevel>("baker");
   const [round, setRound] = useState(1);
   const [order, setOrder] = useState<Order>(() => createOrder(1, "adventure", ["+"]));
-  const [labPuzzle, setLabPuzzle] = useState<LabPuzzle>(() => createLabPuzzle(1));
+  const [labPuzzle, setLabPuzzle] = useState<LabPuzzle>(() => createLabPuzzle(1, "baker"));
   const [labPlacements, setLabPlacements] = useState<Record<string, "left" | "right">>({});
   const [labHistory, setLabHistory] = useState<Array<Record<string, "left" | "right">>>([]);
   const [selectedLabPiece, setSelectedLabPiece] = useState<string | null>(null);
@@ -291,6 +342,8 @@ export default function Home() {
   const audioRef = useRef<AudioContext | null>(null);
   const musicRef = useRef<HTMLAudioElement | null>(null);
   const celebrationTimerRef = useRef<number | null>(null);
+  const seenLabPuzzlesRef = useRef<Set<string>>(new Set());
+  const labSessionSeedRef = useRef(0);
 
   const totalOrders = sessionLevels[sessionLevel].orders;
   const expression = expressionText(tokens);
@@ -426,7 +479,9 @@ export default function Home() {
   }
 
   function resetLab(nextRound: number) {
-    setLabPuzzle(createLabPuzzle(nextRound));
+    const nextPuzzle = createLabPuzzle(nextRound, sessionLevel, seenLabPuzzlesRef.current, labSessionSeedRef.current);
+    seenLabPuzzlesRef.current.add(labPuzzleSignature(nextPuzzle));
+    setLabPuzzle(nextPuzzle);
     setLabPlacements({});
     setLabHistory([]);
     setSelectedLabPiece(null);
@@ -456,7 +511,11 @@ export default function Home() {
     setFastestOrder(null);
     setStrategyCounts({});
     setCelebrating(false);
-    if (mode === "lab") resetLab(1);
+    if (mode === "lab") {
+      seenLabPuzzlesRef.current.clear();
+      labSessionSeedRef.current = randomInt(1, 1_000_000);
+      resetLab(1);
+    }
     else resetOrder(createOrder(1, mode, practiceOperators));
     setPhase("playing");
   }
