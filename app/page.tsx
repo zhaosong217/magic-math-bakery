@@ -269,6 +269,7 @@ export default function Home() {
   const [order, setOrder] = useState<Order>(() => createOrder(1, "adventure", ["+"]));
   const [labPuzzle, setLabPuzzle] = useState<LabPuzzle>(() => createLabPuzzle(1));
   const [labPlacements, setLabPlacements] = useState<Record<string, "left" | "right">>({});
+  const [labHistory, setLabHistory] = useState<Array<Record<string, "left" | "right">>>([]);
   const [selectedLabPiece, setSelectedLabPiece] = useState<string | null>(null);
   const [labMoves, setLabMoves] = useState(0);
   const [tokens, setTokens] = useState<Token[]>([]);
@@ -310,8 +311,13 @@ export default function Home() {
     .reduce((sum, piece) => sum + piece.weight, 0);
 
   const ensureAudio = useCallback(() => {
-    if (!audioRef.current && typeof window !== "undefined") audioRef.current = new AudioContext();
-    void audioRef.current?.resume();
+    if (typeof window === "undefined") return null;
+    if (!audioRef.current || audioRef.current.state === "closed") {
+      audioRef.current = new AudioContext();
+    }
+    if (audioRef.current.state === "suspended") {
+      void audioRef.current.resume().catch(() => undefined);
+    }
     return audioRef.current;
   }, []);
 
@@ -370,7 +376,11 @@ export default function Home() {
       stopMusic();
       if (celebrationTimerRef.current !== null) window.clearTimeout(celebrationTimerRef.current);
       musicRef.current = null;
-      void audioRef.current?.close();
+      const audioContext = audioRef.current;
+      audioRef.current = null;
+      if (audioContext && audioContext.state !== "closed") {
+        void audioContext.close().catch(() => undefined);
+      }
     };
   }, [stopMusic]);
 
@@ -418,11 +428,12 @@ export default function Home() {
   function resetLab(nextRound: number) {
     setLabPuzzle(createLabPuzzle(nextRound));
     setLabPlacements({});
+    setLabHistory([]);
     setSelectedLabPiece(null);
     setLabMoves(0);
     setRecipeSolved(false);
     setDishStage("building");
-    setMessage("Choose an ingredient, then place it on a pan. Make the oven level without using an equation.");
+    setMessage("Every dot and food icon weighs one unit. Use every loose ingredient and make both pans equal.");
     setMessageTone("neutral");
   }
 
@@ -517,6 +528,7 @@ export default function Home() {
   function chooseLabPiece(pieceId: string) {
     if (recipeSolved) return;
     if (labPlacements[pieceId]) {
+      setLabHistory((current) => [...current, labPlacements]);
       setLabPlacements((current) => {
         const next = { ...current };
         delete next[pieceId];
@@ -542,6 +554,7 @@ export default function Home() {
       .filter((piece) => nextPlacements[piece.id] === "right")
       .reduce((sum, piece) => sum + piece.weight, 0);
     const allPlaced = labPuzzle.pieces.every((piece) => nextPlacements[piece.id]);
+    setLabHistory((current) => [...current, labPlacements]);
     setLabPlacements(nextPlacements);
     setLabMoves(nextMoves);
     setSelectedLabPiece(null);
@@ -552,12 +565,56 @@ export default function Home() {
       setDishStage("ready");
       setScore((value) => value + points);
       setStrategyCounts((current) => ({ ...current, "Balance thinking": (current["Balance thinking"] ?? 0) + 1 }));
-      setMessage(`Perfect balance! The oven is level. +${points} coins — bake your dish.`);
+      setMessage(`Perfect balance! +${points} coins. Continue when you are ready for the next puzzle.`);
       setMessageTone("good");
       playTone([392, 523, 659], 0.25, 0.05);
       return;
     }
     setMessage("Watch the oven tilt. Place every ingredient and make both pans level.");
+  }
+
+  function undoLabMove() {
+    if (!labHistory.length || recipeSolved) return;
+    const previous = labHistory[labHistory.length - 1];
+    setLabPlacements(previous);
+    setLabHistory((current) => current.slice(0, -1));
+    setSelectedLabPiece(null);
+    setLabMoves((value) => Math.max(0, value - 1));
+    setMessage("Last move undone. Choose an ingredient and try again.");
+    setMessageTone("neutral");
+    playTone([420], 0.08, 0.025);
+  }
+
+  function clearLab() {
+    if (!Object.keys(labPlacements).length || recipeSolved) return;
+    setLabPlacements({});
+    setLabHistory([]);
+    setSelectedLabPiece(null);
+    setLabMoves(0);
+    setMessage("All loose ingredients are back on the counter. Start with either side.");
+    setMessageTone("neutral");
+  }
+
+  function advanceLabPuzzle() {
+    if (!recipeSolved || mode !== "lab" || celebrating) return;
+    const nextCombo = combo + 1;
+    setCombo(nextCombo);
+    setBestCombo((value) => Math.max(value, nextCombo));
+    setOrdersServed((value) => value + 1);
+    setCelebrating(true);
+    playTone([523, 659, 784], 0.25, 0.055);
+    celebrationTimerRef.current = window.setTimeout(() => {
+      celebrationTimerRef.current = null;
+      if (totalOrders !== null && round >= totalOrders) {
+        setPhase("finished");
+        setCelebrating(false);
+        return;
+      }
+      const nextRound = round + 1;
+      setRound(nextRound);
+      resetLab(nextRound);
+      setCelebrating(false);
+    }, 650);
   }
 
   function checkRecipe() {
@@ -798,22 +855,31 @@ export default function Home() {
               <div className="lab-layout">
                 <div className="balance-game">
                   <div className="lab-heading"><span>OVEN BALANCE LAB</span><h2>Use every loose ingredient and level the beam</h2><small>Suggested moves: {labPuzzle.moves} · Your moves: {labMoves}</small></div>
+                  <div className="lab-howto" aria-label="How to play Oven Balance Lab">
+                    <div><strong>1</strong><span><b>Read the weight</b><small>Every ● dot and every food icon weighs 1.</small></span></div>
+                    <div><strong>2</strong><span><b>Use every ingredient</b><small>Tap a food group, then choose either pan.</small></span></div>
+                    <div><strong>3</strong><span><b>Make both sides equal</b><small>The beam must be level after all food is placed.</small></span></div>
+                  </div>
                   <div className={`balance-scale ${labLeftWeight > labRightWeight ? "tilt-left" : labRightWeight > labLeftWeight ? "tilt-right" : "level"}`}>
                     <button className="scale-pan left-pan" onClick={() => placeLabPiece("left")} disabled={!selectedLabPiece || recipeSolved} aria-label="Place selected ingredient on the left pan">
+                      <small>FIXED DOTS · {labPuzzle.leftBase}</small>
                       <span className="base-stack" aria-label="Fixed ingredients">{"●".repeat(labPuzzle.leftBase)}</span>
                       <span className="placed-stack">{labPuzzle.pieces.filter((piece) => labPlacements[piece.id] === "left").map((piece) => <i key={piece.id}>{piece.emoji.repeat(piece.weight)}</i>)}</span>
                       <strong>LEFT PAN</strong>
                     </button>
-                    <div className="scale-post"><i /><strong>{labLeftWeight === labRightWeight ? "LEVEL" : "TILTING"}</strong></div>
+                    <div className="scale-post"><i /><strong>{labLeftWeight === labRightWeight ? Object.keys(labPlacements).length === labPuzzle.pieces.length ? "LEVEL" : "LEVEL FOR NOW" : "TILTING"}</strong></div>
                     <button className="scale-pan right-pan" onClick={() => placeLabPiece("right")} disabled={!selectedLabPiece || recipeSolved} aria-label="Place selected ingredient on the right pan">
+                      <small>FIXED DOTS · {labPuzzle.rightBase}</small>
                       <span className="base-stack" aria-label="Fixed ingredients">{"●".repeat(labPuzzle.rightBase)}</span>
                       <span className="placed-stack">{labPuzzle.pieces.filter((piece) => labPlacements[piece.id] === "right").map((piece) => <i key={piece.id}>{piece.emoji.repeat(piece.weight)}</i>)}</span>
                       <strong>RIGHT PAN</strong>
                     </button>
                   </div>
+                  <div className="lab-actions"><button onClick={undoLabMove} disabled={!labHistory.length || recipeSolved}><span>↶</span> Undo last move</button><button onClick={clearLab} disabled={!Object.keys(labPlacements).length || recipeSolved}><span>✕</span> Clear all</button></div>
                   <div className="loose-ingredients"><span>LOOSE INGREDIENTS</span><div>{labPuzzle.pieces.map((piece) => <button key={piece.id} className={`${selectedLabPiece === piece.id ? "selected" : ""} ${labPlacements[piece.id] ? "placed" : ""}`} onClick={() => chooseLabPiece(piece.id)} disabled={recipeSolved} aria-pressed={selectedLabPiece === piece.id}><span>{piece.emoji.repeat(piece.weight)}</span><small>{labPlacements[piece.id] ? `On ${labPlacements[piece.id]} pan · tap to move` : "Tap, then choose a pan"}</small></button>)}</div></div>
+                  {recipeSolved && <div className="lab-success"><span>✓</span><div><strong>Perfect balance!</strong><small>Every ingredient is used and both pans have equal weight.</small></div><button className="serve-button" onClick={advanceLabPuzzle}>{totalOrders !== null && round >= totalOrders ? "View results →" : "Next puzzle →"}</button></div>}
                 </div>
-                <aside className="lab-rules"><span>THE HIDDEN MATH</span><h3>Play first. Notice later.</h3><p>No numbers or operation signs are required. The oven teaches equality through movement, weight and conservation.</p><div><i>⚖️</i><strong>Balance</strong><small>Both sides must carry the same total weight.</small></div><div><i>🔄</i><strong>Rearrange</strong><small>Tap a placed ingredient to bring it back.</small></div><div><i>✨</i><strong>Discover</strong><small>Use fewer moves for a larger tip.</small></div></aside>
+                <aside className="lab-rules"><span>GOAL OF THE PUZZLE</span><h3>Place all food. Level the oven.</h3><p>The dots are fixed weights and cannot move. The food groups are movable weights. You may add food to either side—not only the lighter side.</p><div><i>●</i><strong>One symbol = one weight</strong><small>A group of three berries weighs the same as three dots.</small></div><div><i>↔️</i><strong>Either pan is allowed</strong><small>Sometimes both sides need extra food to use every group.</small></div><div><i>✨</i><strong>Finish condition</strong><small>All loose food is placed and the beam is level.</small></div></aside>
               </div>
             ) : (
             <div className="builder-layout">
@@ -856,10 +922,8 @@ export default function Home() {
                   {foundRecipes.length > 0 && <button className="secondary-button" onClick={finishExploring}>Finish exploring →</button>}
                   <button className="serve-button" onClick={checkRecipe} disabled={!tokens.length}>Check recipe</button>
                 </>}
-                {recipeSolved && dishStage === "ready" && <>
-                  {mode !== "lab" && <button className="secondary-button" onClick={findAnotherWay}>Find another way</button>}
-                  <button className="serve-button" onClick={bakeDish}>Bake this dish →</button>
-                </>}
+                {recipeSolved && dishStage === "ready" && mode === "lab" && <button className="serve-button" onClick={advanceLabPuzzle}>{totalOrders !== null && round >= totalOrders ? "View results →" : "Next puzzle →"}</button>}
+                {recipeSolved && dishStage === "ready" && mode !== "lab" && <><button className="secondary-button" onClick={findAnotherWay}>Find another way</button><button className="serve-button" onClick={bakeDish}>Bake this dish →</button></>}
                 {recipeSolved && dishStage === "plated" && <button className="serve-button deliver-button" onClick={deliverOrder}>Deliver order →</button>}
                 {dishStage === "delivering" && <strong className="delivery-status">Order on its way!</strong>}
               </div>

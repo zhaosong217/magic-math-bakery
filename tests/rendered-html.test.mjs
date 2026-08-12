@@ -38,6 +38,11 @@ test("P0.1 includes guided inputs, delivery, lab play, and safe exits", async ()
   assert.match(source, /input-focus/);
   assert.match(source, /Deliver order/);
   assert.match(source, /OVEN BALANCE LAB/);
+  assert.match(source, /Every ● dot and every food icon weighs 1/);
+  assert.match(source, /Undo last move/);
+  assert.match(source, /Clear all/);
+  assert.match(source, /Next puzzle/);
+  assert.match(source, /advanceLabPuzzle/);
   assert.doesNotMatch(source, /playAmbientChord|setInterval\(playNext/);
 });
 
