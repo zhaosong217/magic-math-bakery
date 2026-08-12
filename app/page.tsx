@@ -6,6 +6,8 @@ type Mode = "adventure" | "practice" | "lab";
 type Operation = "add" | "subtract" | "multiply" | "divide" | "mixed";
 type Operator = "+" | "−" | "×" | "÷";
 type Phase = "menu" | "playing" | "finished";
+type SessionLevel = "apprentice" | "baker" | "master" | "endless";
+type DishStage = "building" | "ready" | "plated" | "delivering";
 
 type NumberCard = {
   id: string;
@@ -29,14 +31,22 @@ type Order = {
   target: number;
   cards: NumberCard[];
   operation: Operation;
+  operators: Operator[];
   timeLimit: number;
   customer: string;
   request: string;
   challenge: string;
 };
 
-const TOTAL_STANDARD_ORDERS = 8;
-const TOTAL_LAB_ORDERS = 5;
+type LabPiece = { id: string; weight: number; emoji: string; name: string };
+type LabPuzzle = { leftBase: number; rightBase: number; pieces: LabPiece[]; moves: number };
+
+const sessionLevels: Record<SessionLevel, { title: string; orders: number | null; note: string }> = {
+  apprentice: { title: "Apprentice", orders: 6, note: "6 gentle orders" },
+  baker: { title: "Baker", orders: 10, note: "10 growing orders" },
+  master: { title: "Master Baker", orders: 12, note: "12 clever orders" },
+  endless: { title: "Endless Shift", orders: null, note: "Play until you stop" },
+};
 const ingredientStyles = [
   { emoji: "🍓", name: "strawberry" },
   { emoji: "🫐", name: "blueberry" },
@@ -64,12 +74,23 @@ const operationInfo: Record<Operation, { symbol: string; title: string; time: nu
   mixed: { symbol: "✦", title: "Mixed", time: 35 },
 };
 
-const labPuzzles = [
-  { target: 12, values: [4, 8, 10, 2, 3, 4, 24, 2] },
-  { target: 18, values: [9, 9, 20, 2, 3, 6, 36, 2] },
-  { target: 24, values: [12, 12, 30, 6, 3, 8, 48, 2] },
-  { target: 15, values: [7, 8, 20, 5, 3, 5, 30, 2] },
-  { target: 16, values: [8, 8, 20, 4, 2, 8, 32, 2] },
+const operatorInfo: Record<Operator, { operation: Exclude<Operation, "mixed">; title: string }> = {
+  "+": { operation: "add", title: "Add" },
+  "−": { operation: "subtract", title: "Subtract" },
+  "×": { operation: "multiply", title: "Multiply" },
+  "÷": { operation: "divide", title: "Divide" },
+};
+
+const allOperators = Object.keys(operatorInfo) as Operator[];
+const dishes = ["🧁", "🍰", "🥧", "🍮", "🍩", "🥐"];
+
+const labBlueprints: Array<Omit<LabPuzzle, "pieces"> & { weights: number[] }> = [
+  { leftBase: 4, rightBase: 1, weights: [1, 2, 4], moves: 5 },
+  { leftBase: 2, rightBase: 5, weights: [1, 2, 4], moves: 5 },
+  { leftBase: 6, rightBase: 2, weights: [1, 1, 2, 4], moves: 6 },
+  { leftBase: 3, rightBase: 8, weights: [1, 2, 2, 4], moves: 7 },
+  { leftBase: 7, rightBase: 2, weights: [1, 2, 4, 4], moves: 7 },
+  { leftBase: 4, rightBase: 9, weights: [1, 2, 2, 4], moves: 7 },
 ];
 
 function randomInt(min: number, max: number) {
@@ -101,7 +122,7 @@ function adventureOperation(round: number): Operation {
   return "mixed";
 }
 
-function createStandardOrder(round: number, operation: Operation): Order {
+function createStandardOrder(round: number, operation: Operation, operators = allowedOperators(operation)): Order {
   let target = 10;
   let solution: number[] = [];
   let challenge = "Build one correct recipe.";
@@ -145,6 +166,7 @@ function createStandardOrder(round: number, operation: Operation): Order {
     target,
     cards: makeCards(values, round),
     operation,
+    operators,
     timeLimit,
     customer: customers[(round - 1) % customers.length],
     request: requests[(round - 1) % requests.length],
@@ -152,23 +174,28 @@ function createStandardOrder(round: number, operation: Operation): Order {
   };
 }
 
-function createLabOrder(round: number): Order {
-  const puzzle = labPuzzles[(round - 1) % labPuzzles.length];
+function createLabPuzzle(round: number): LabPuzzle {
+  const blueprint = labBlueprints[(round - 1) % labBlueprints.length];
   return {
-    target: puzzle.target,
-    cards: makeCards(puzzle.values, round),
-    operation: "mixed",
-    timeLimit: 45,
-    customer: customers[(round + 1) % customers.length],
-    request: "Show me how flexible numbers can be!",
-    challenge: "One recipe serves the order. Different structures earn discovery stars.",
+    leftBase: blueprint.leftBase,
+    rightBase: blueprint.rightBase,
+    moves: Math.max(4, blueprint.moves - Math.floor((round - 1) / labBlueprints.length)),
+    pieces: shuffle(blueprint.weights).map((weight, index) => ({
+      id: `lab-${round}-${index}-${weight}`,
+      weight,
+      emoji: ingredientStyles[index % ingredientStyles.length].emoji,
+      name: ingredientStyles[index % ingredientStyles.length].name,
+    })),
   };
 }
 
-function createOrder(round: number, mode: Mode, practiceOperation: Operation) {
-  if (mode === "lab") return createLabOrder(round);
-  const operation = mode === "adventure" ? adventureOperation(round) : practiceOperation;
-  return createStandardOrder(round, operation);
+function createOrder(round: number, mode: Exclude<Mode, "lab">, practiceOperators: Operator[]) {
+  if (mode === "adventure") {
+    const operation = adventureOperation(round);
+    return createStandardOrder(round, operation);
+  }
+  const chosen = practiceOperators[(round - 1) % practiceOperators.length] ?? "+";
+  return createStandardOrder(round, operatorInfo[chosen].operation, practiceOperators);
 }
 
 function allowedOperators(operation: Operation): Operator[] {
@@ -236,9 +263,14 @@ function recipeSignature(tokens: Token[]) {
 export default function Home() {
   const [phase, setPhase] = useState<Phase>("menu");
   const [mode, setMode] = useState<Mode>("adventure");
-  const [practiceOperation, setPracticeOperation] = useState<Operation>("add");
+  const [practiceOperators, setPracticeOperators] = useState<Operator[]>(["+"]);
+  const [sessionLevel, setSessionLevel] = useState<SessionLevel>("baker");
   const [round, setRound] = useState(1);
-  const [order, setOrder] = useState<Order>(() => createOrder(1, "adventure", "add"));
+  const [order, setOrder] = useState<Order>(() => createOrder(1, "adventure", ["+"]));
+  const [labPuzzle, setLabPuzzle] = useState<LabPuzzle>(() => createLabPuzzle(1));
+  const [labPlacements, setLabPlacements] = useState<Record<string, "left" | "right">>({});
+  const [selectedLabPiece, setSelectedLabPiece] = useState<string | null>(null);
+  const [labMoves, setLabMoves] = useState(0);
   const [tokens, setTokens] = useState<Token[]>([]);
   const [foundRecipes, setFoundRecipes] = useState<Recipe[]>([]);
   const [score, setScore] = useState(0);
@@ -254,19 +286,30 @@ export default function Home() {
   const [celebrating, setCelebrating] = useState(false);
   const [strategyCounts, setStrategyCounts] = useState<Record<string, number>>({});
   const [soundOn, setSoundOn] = useState(true);
+  const [dishStage, setDishStage] = useState<DishStage>("building");
   const audioRef = useRef<AudioContext | null>(null);
-  const musicTimerRef = useRef<number | null>(null);
-  const musicStepRef = useRef(0);
+  const musicRef = useRef<HTMLAudioElement | null>(null);
   const celebrationTimerRef = useRef<number | null>(null);
 
-  const totalOrders = mode === "lab" ? TOTAL_LAB_ORDERS : TOTAL_STANDARD_ORDERS;
+  const totalOrders = sessionLevels[sessionLevel].orders;
   const expression = expressionText(tokens);
   const currentValue = evaluateExpression(tokens);
   const usedCardIds = tokens
     .filter((token): token is Extract<Token, { kind: "number" }> => token.kind === "number")
     .map((token) => token.id);
   const nextNeedsNumber = !tokens.length || tokens[tokens.length - 1].kind === "operator";
-  const operators = allowedOperators(order.operation);
+  const operators = order.operators;
+  const autoOperator = mode === "practice" && practiceOperators.length === 1 ? practiceOperators[0] : null;
+  const numberInputActive = Boolean(autoOperator) || nextNeedsNumber;
+  const operatorInputActive = !autoOperator && !nextNeedsNumber;
+  const labLeftWeight = labPuzzle.leftBase + labPuzzle.pieces
+    .filter((piece) => labPlacements[piece.id] === "left")
+    .reduce((sum, piece) => sum + piece.weight, 0);
+  const labRightWeight = labPuzzle.rightBase + labPuzzle.pieces
+    .filter((piece) => labPlacements[piece.id] === "right")
+    .reduce((sum, piece) => sum + piece.weight, 0);
+  const labAllPlaced = labPuzzle.pieces.every((piece) => labPlacements[piece.id]);
+  const labBalanced = labAllPlaced && labLeftWeight === labRightWeight;
 
   const ensureAudio = useCallback(() => {
     if (!audioRef.current && typeof window !== "undefined") audioRef.current = new AudioContext();
@@ -292,49 +335,25 @@ export default function Home() {
     });
   }, [ensureAudio, soundOn]);
 
-  const playAmbientChord = useCallback((frequencies: number[]) => {
-    if (!soundOn) return;
-    const context = ensureAudio();
-    if (!context) return;
-    const startAt = context.currentTime;
-    frequencies.forEach((frequency, index) => {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      const filter = context.createBiquadFilter();
-      oscillator.type = index === 0 ? "sine" : "triangle";
-      oscillator.frequency.value = frequency;
-      filter.type = "lowpass";
-      filter.frequency.value = 920;
-      gain.gain.setValueAtTime(0.0001, startAt);
-      gain.gain.exponentialRampToValueAtTime(index === 0 ? 0.009 : 0.0045, startAt + 0.9);
-      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 4.2);
-      oscillator.connect(filter).connect(gain).connect(context.destination);
-      oscillator.start(startAt);
-      oscillator.stop(startAt + 4.3);
-    });
-  }, [ensureAudio, soundOn]);
-
   const stopMusic = useCallback(() => {
-    if (musicTimerRef.current !== null) window.clearInterval(musicTimerRef.current);
-    musicTimerRef.current = null;
+    musicRef.current?.pause();
   }, []);
 
+  const playMusic = useCallback(() => {
+    if (!soundOn) return;
+    if (!musicRef.current) {
+      const music = new Audio("/audio/first-light-particles.ogg");
+      music.loop = true;
+      music.volume = 0.16;
+      musicRef.current = music;
+    }
+    void musicRef.current.play().catch(() => undefined);
+  }, [soundOn]);
+
   const startMusic = useCallback(() => {
-    stopMusic();
-    if (!soundOn || phase !== "playing") return;
-    const chords = [
-      [130.81, 196, 246.94, 329.63],
-      [110, 164.81, 220, 261.63],
-      [146.83, 220, 261.63, 349.23],
-      [98, 146.83, 196, 246.94],
-    ];
-    const playNext = () => {
-      playAmbientChord(chords[musicStepRef.current % chords.length]);
-      musicStepRef.current += 1;
-    };
-    playNext();
-    musicTimerRef.current = window.setInterval(playNext, 4800);
-  }, [phase, playAmbientChord, soundOn, stopMusic]);
+    if (phase !== "playing") return;
+    playMusic();
+  }, [phase, playMusic]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("magic-math-sound");
@@ -350,12 +369,13 @@ export default function Home() {
     return () => {
       stopMusic();
       if (celebrationTimerRef.current !== null) window.clearTimeout(celebrationTimerRef.current);
+      musicRef.current = null;
       void audioRef.current?.close();
     };
   }, [stopMusic]);
 
   useEffect(() => {
-    if (phase !== "playing" || recipeSolved || celebrating) return;
+    if (phase !== "playing" || mode === "lab" || recipeSolved || celebrating || dishStage !== "building") return;
     const timer = window.setInterval(() => {
       setOrderTimeLeft((value) => {
         const next = Math.max(-30, value - 1);
@@ -364,14 +384,23 @@ export default function Home() {
       });
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [celebrating, phase, playTone, recipeSolved]);
+  }, [celebrating, dishStage, mode, phase, playTone, recipeSolved]);
 
   function toggleSound() {
     const next = !soundOn;
     setSoundOn(next);
     window.localStorage.setItem("magic-math-sound", next ? "on" : "off");
     if (!next) stopMusic();
-    else ensureAudio();
+    else {
+      ensureAudio();
+      if (!musicRef.current) {
+        const music = new Audio("/audio/first-light-particles.ogg");
+        music.loop = true;
+        music.volume = 0.16;
+        musicRef.current = music;
+      }
+      if (phase === "playing") void musicRef.current.play().catch(() => undefined);
+    }
   }
 
   function resetOrder(nextOrder: Order) {
@@ -381,12 +410,33 @@ export default function Home() {
     setMistakes(0);
     setOrderTimeLeft(nextOrder.timeLimit);
     setRecipeSolved(false);
+    setDishStage("building");
     setMessage("Build an expression, then check your recipe.");
+    setMessageTone("neutral");
+  }
+
+  function resetLab(nextRound: number) {
+    setLabPuzzle(createLabPuzzle(nextRound));
+    setLabPlacements({});
+    setSelectedLabPiece(null);
+    setLabMoves(0);
+    setRecipeSolved(false);
+    setDishStage("building");
+    setMessage("Choose an ingredient, then place it on a pan. Make the oven level without using an equation.");
     setMessageTone("neutral");
   }
 
   function startGame() {
     ensureAudio();
+    if (soundOn) {
+      if (!musicRef.current) {
+        const music = new Audio("/audio/first-light-particles.ogg");
+        music.loop = true;
+        music.volume = 0.16;
+        musicRef.current = music;
+      }
+      void musicRef.current.play().catch(() => undefined);
+    }
     setRound(1);
     setScore(0);
     setCombo(0);
@@ -395,14 +445,32 @@ export default function Home() {
     setFastestOrder(null);
     setStrategyCounts({});
     setCelebrating(false);
-    resetOrder(createOrder(1, mode, practiceOperation));
+    if (mode === "lab") resetLab(1);
+    else resetOrder(createOrder(1, mode, practiceOperators));
     setPhase("playing");
   }
 
+  function togglePracticeOperator(operator: Operator) {
+    setPracticeOperators((current) => {
+      if (current.includes(operator)) return current.length === 1 ? current : current.filter((item) => item !== operator);
+      return allOperators.filter((item) => [...current, operator].includes(item));
+    });
+  }
+
   function addNumber(card: NumberCard) {
-    if (!nextNeedsNumber || usedCardIds.includes(card.id) || recipeSolved) return;
-    setTokens((current) => [...current, { kind: "number", id: card.id, value: card.value }]);
-    setMessage("Good choice. Add an operation sign next.");
+    if (recipeSolved) return;
+    const isLastSelected = tokens[tokens.length - 1]?.kind === "number" && tokens[tokens.length - 1].id === card.id;
+    if (isLastSelected) {
+      undoToken();
+      return;
+    }
+    if (!numberInputActive || usedCardIds.includes(card.id)) return;
+    setTokens((current) => autoOperator && current.length
+      ? [...current, { kind: "operator", value: autoOperator }, { kind: "number", id: card.id, value: card.value }]
+      : [...current, { kind: "number", id: card.id, value: card.value }]);
+    setMessage(autoOperator
+      ? `${autoOperator} was added automatically. Choose another number or check your recipe.`
+      : "Good choice. The operation signs are glowing — choose one next.");
     setMessageTone("neutral");
     playTone([520], 0.08, 0.035);
   }
@@ -417,7 +485,9 @@ export default function Home() {
 
   function undoToken() {
     if (recipeSolved) return;
-    setTokens((current) => current.slice(0, -1));
+    setTokens((current) => autoOperator && current.length > 1 ? current.slice(0, -2) : current.slice(0, -1));
+    setMessage("Last choice removed. Pick again when you are ready.");
+    setMessageTone("neutral");
     playTone([420], 0.07, 0.025);
   }
 
@@ -427,6 +497,60 @@ export default function Home() {
     setMessage("Recipe cleared. Try a fresh idea!");
     setMessageTone("neutral");
   }
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (phase !== "playing" || mode === "lab" || recipeSolved) return;
+      if (event.key === "Backspace") {
+        event.preventDefault();
+        undoToken();
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        clearExpression();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
+
+  function chooseLabPiece(pieceId: string) {
+    if (recipeSolved) return;
+    if (labPlacements[pieceId]) {
+      setLabPlacements((current) => {
+        const next = { ...current };
+        delete next[pieceId];
+        return next;
+      });
+      setLabMoves((value) => value + 1);
+      setSelectedLabPiece(pieceId);
+      setMessage("Ingredient returned to the counter. Choose a pan for it.");
+      return;
+    }
+    setSelectedLabPiece(pieceId);
+    setMessage("Now choose the left or right oven pan.");
+  }
+
+  function placeLabPiece(side: "left" | "right") {
+    if (!selectedLabPiece || recipeSolved) return;
+    setLabPlacements((current) => ({ ...current, [selectedLabPiece]: side }));
+    setLabMoves((value) => value + 1);
+    setSelectedLabPiece(null);
+    setMessage("Watch the oven tilt. Place every ingredient and make both pans level.");
+    playTone([440, 554], 0.12, 0.03);
+  }
+
+  useEffect(() => {
+    if (mode !== "lab" || phase !== "playing" || recipeSolved || !labBalanced) return;
+    const points = Math.max(50, 180 - Math.max(0, labMoves - labPuzzle.moves) * 15);
+    setRecipeSolved(true);
+    setDishStage("ready");
+    setScore((value) => value + points);
+    setStrategyCounts((current) => ({ ...current, "Balance thinking": (current["Balance thinking"] ?? 0) + 1 }));
+    setMessage(`Perfect balance! The oven is level. +${points} coins — bake your dish.`);
+    setMessageTone("good");
+    playTone([392, 523, 659], 0.25, 0.05);
+  }, [labBalanced, labMoves, labPuzzle.moves, mode, phase, playTone, recipeSolved]);
 
   function checkRecipe() {
     const value = evaluateExpression(tokens);
@@ -472,6 +596,7 @@ export default function Home() {
     setScore((valueScore) => valueScore + points);
     setStrategyCounts((current) => ({ ...current, [category]: (current[category] ?? 0) + 1 }));
     setRecipeSolved(true);
+    setDishStage("ready");
     setMessage(isFirst
       ? `Perfect recipe! +${points} coins. Serve it or explore another structure.`
       : `New discovery: ${category}! +${points} coins.`);
@@ -488,9 +613,19 @@ export default function Home() {
   function findAnotherWay() {
     setTokens([]);
     setRecipeSolved(false);
+    setDishStage("building");
     setMessage("Same target, fresh structure. Which strategy has not been used yet?");
     setMessageTone("neutral");
     playTone([659, 784], 0.14, 0.04);
+  }
+
+  function finishExploring() {
+    if (!foundRecipes.length) return;
+    setTokens([]);
+    setRecipeSolved(true);
+    setDishStage("ready");
+    setMessage("Your best recipe is ready. Bake it when you are happy with your discoveries.");
+    setMessageTone("good");
   }
 
   function exitToMenu() {
@@ -498,37 +633,64 @@ export default function Home() {
     celebrationTimerRef.current = null;
     setCelebrating(false);
     setTokens([]);
+    stopMusic();
     setPhase("menu");
   }
 
-  function serveOrder() {
-    if (!foundRecipes.length || celebrating) return;
+  function finishOrExit() {
+    if (sessionLevel === "endless" && ordersServed > 0) {
+      if (celebrationTimerRef.current !== null) window.clearTimeout(celebrationTimerRef.current);
+      celebrationTimerRef.current = null;
+      setCelebrating(false);
+      stopMusic();
+      setPhase("finished");
+      return;
+    }
+    exitToMenu();
+  }
+
+  function bakeDish() {
+    if (!recipeSolved || dishStage !== "ready") return;
+    setDishStage("plated");
+    setMessage("Fresh from the oven! The dish is plated — deliver it to the customer.");
+    setMessageTone("good");
+    playTone([523, 659, 784], 0.28, 0.045);
+  }
+
+  function deliverOrder() {
+    if (!recipeSolved || dishStage !== "plated" || celebrating) return;
     const nextCombo = combo + 1;
     setCombo(nextCombo);
     setBestCombo((value) => Math.max(value, nextCombo));
     setOrdersServed((value) => value + 1);
     setCelebrating(true);
+    setDishStage("delivering");
     playTone([523, 659, 784], 0.25, 0.06);
     celebrationTimerRef.current = window.setTimeout(() => {
       celebrationTimerRef.current = null;
-      if (round >= totalOrders) {
+      if (totalOrders !== null && round >= totalOrders) {
         setPhase("finished");
         setCelebrating(false);
         return;
       }
       const nextRound = round + 1;
       setRound(nextRound);
-      resetOrder(createOrder(nextRound, mode, practiceOperation));
+      if (mode === "lab") resetLab(nextRound);
+      else resetOrder(createOrder(nextRound, mode, practiceOperators));
       setCelebrating(false);
-    }, 700);
+    }, 1300);
   }
 
-  const progress = (round / totalOrders) * 100;
+  const progress = totalOrders === null ? ((round - 1) % 5 + 1) * 20 : (round / totalOrders) * 100;
   const topStrategies = useMemo(
     () => Object.entries(strategyCounts).sort((a, b) => b[1] - a[1]),
     [strategyCounts],
   );
-  const titleForMode = mode === "adventure" ? "Bakery Adventure" : mode === "practice" ? `${operationInfo[practiceOperation].title} Practice` : "Number Lab";
+  const titleForMode = mode === "adventure"
+    ? "Bakery Adventure"
+    : mode === "practice"
+      ? `${practiceOperators.join(" ")} Practice`
+      : "Oven Balance Lab";
 
   return (
     <main className="game-shell">
@@ -553,31 +715,43 @@ export default function Home() {
 
             <div className="mode-grid" role="radiogroup" aria-label="Game mode">
               <button className={`mode-card ${mode === "adventure" ? "selected" : ""}`} onClick={() => setMode("adventure")} role="radio" aria-checked={mode === "adventure"}>
-                <span className="mode-icon">🗺️</span><span><strong>Bakery Adventure</strong><small>Unlock +, −, × and ÷ across 8 orders</small></span><i>GUIDED</i>
+                <span className="mode-icon">🗺️</span><span><strong>Bakery Adventure</strong><small>Unlock +, −, × and ÷ through a guided shift</small></span><i>GUIDED</i>
               </button>
               <button className={`mode-card ${mode === "practice" ? "selected" : ""}`} onClick={() => setMode("practice")} role="radio" aria-checked={mode === "practice"}>
-                <span className="mode-icon">⏱️</span><span><strong>Quick Practice</strong><small>Train one operation with time bonuses</small></span><i>FLUENCY</i>
+                <span className="mode-icon">⏱️</span><span><strong>Quick Practice</strong><small>Choose one or several operations for a focused shift</small></span><i>FLUENCY</i>
               </button>
               <button className={`mode-card ${mode === "lab" ? "selected" : ""}`} onClick={() => setMode("lab")} role="radio" aria-checked={mode === "lab"}>
-                <span className="mode-icon">🔎</span><span><strong>Number Lab</strong><small>Find several structures for the same target</small></span><i>THINKING</i>
+                <span className="mode-icon">⚖️</span><span><strong>Oven Balance Lab</strong><small>A pure puzzle: balance ingredients without equations</small></span><i>PLAY</i>
               </button>
             </div>
 
             {mode === "practice" && (
               <div className="operation-picker">
-                <span>CHOOSE AN OPERATION</span>
+                <span>CHOOSE ONE OR MORE OPERATIONS</span>
                 <div>
-                  {(Object.keys(operationInfo) as Operation[]).map((operation) => (
-                    <button key={operation} className={practiceOperation === operation ? "selected" : ""} onClick={() => setPracticeOperation(operation)} aria-pressed={practiceOperation === operation}>
-                      <strong>{operationInfo[operation].symbol}</strong><small>{operationInfo[operation].title}</small>
+                  {allOperators.map((operator) => (
+                    <button key={operator} className={practiceOperators.includes(operator) ? "selected" : ""} onClick={() => togglePracticeOperator(operator)} aria-pressed={practiceOperators.includes(operator)}>
+                      <strong>{operator}</strong><small>{operatorInfo[operator].title}</small>
                     </button>
                   ))}
                 </div>
+                <p>{practiceOperators.length === 1 ? `${practiceOperators[0]} will be inserted automatically during play.` : "You will choose between the selected signs during play."}</p>
               </div>
             )}
 
+            <div className="session-picker">
+              <span>CHOOSE SHIFT LENGTH</span>
+              <div>
+                {(Object.keys(sessionLevels) as SessionLevel[]).map((level) => (
+                  <button key={level} className={sessionLevel === level ? "selected" : ""} onClick={() => setSessionLevel(level)} aria-pressed={sessionLevel === level}>
+                    <strong>{sessionLevels[level].title}</strong><small>{sessionLevels[level].note}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <button className="primary-button" onClick={startGame}>Start {mode === "lab" ? "exploring" : "the shift"} <span>→</span></button>
-            <p className="tiny-note">Per-order time rewards · one answer is enough · ages 7–11</p>
+            <p className="tiny-note">P0.1 · per-order rewards · one answer is enough · ages 7–11</p>
           </div>
           <div className="menu-visual" aria-hidden="true">
             <div className="visual-badge">NEW RECIPE BOOK</div>
@@ -593,39 +767,67 @@ export default function Home() {
       {phase === "playing" && (
         <section className={`play-area ${celebrating ? "is-celebrating" : ""}`} aria-live="polite">
           <div className="hud">
-            <button className="exit-button" onClick={exitToMenu} aria-label="Exit the current game and return to the main menu">← Exit to menu</button>
+            <button className="exit-button" onClick={finishOrExit} aria-label={sessionLevel === "endless" && ordersServed > 0 ? "Finish the endless shift and view results" : "Exit the current game and return to the main menu"}>{sessionLevel === "endless" && ordersServed > 0 ? "✓ Finish shift" : "← Exit to menu"}</button>
             <div className="hud-stat"><span>COINS</span><strong>★ {score}</strong></div>
             <div className="progress-wrap">
-              <div className="progress-label"><span>{titleForMode.toUpperCase()} · ORDER {round} OF {totalOrders}</span><span>{Math.round(progress)}%</span></div>
+              <div className="progress-label"><span>{titleForMode.toUpperCase()} · ORDER {round}{totalOrders === null ? " · ENDLESS" : ` OF ${totalOrders}`}</span><span>{totalOrders === null ? "∞" : `${Math.round(progress)}%`}</span></div>
               <div className="progress-track"><div style={{ width: `${progress}%` }} /></div>
             </div>
-            <div className={`hud-stat timer ${orderTimeLeft <= 5 ? "urgent" : ""}`}><span>{orderTimeLeft >= 0 ? "BONUS TIME" : "OVERTIME"}</span><strong>◷ {Math.abs(orderTimeLeft)}s</strong></div>
+            {mode === "lab"
+              ? <div className="hud-stat timer"><span>OVEN MOVES</span><strong>⚖ {labMoves} / {labPuzzle.moves}</strong></div>
+              : <div className={`hud-stat timer ${orderTimeLeft <= 5 ? "urgent" : ""}`}><span>{orderTimeLeft >= 0 ? "BONUS TIME" : "OVERTIME"}</span><strong>◷ {Math.abs(orderTimeLeft)}s</strong></div>}
           </div>
 
-          <div className="order-stage">
-            <div className="customer-card"><div className="customer-face" aria-hidden="true">{["🧒🏽", "👧🏻", "👦🏾", "👧🏼", "🧒🏻"][(round - 1) % 5]}</div><div><span>CUSTOMER</span><strong>{order.customer}</strong></div></div>
-            <div className="speech-bubble"><p>{order.request}</p><div className="target-line">Make my treat equal <strong>{order.target}</strong></div><small>{order.challenge}</small></div>
+          <div className={`order-stage dish-${dishStage}`}>
+            <div className="customer-card"><div className="customer-face" aria-hidden="true">{dishStage === "delivering" ? "😋" : ["🧒🏽", "👧🏻", "👦🏾", "👧🏼", "🧒🏻"][(round - 1) % 5]}</div><div><span>CUSTOMER</span><strong>{mode === "lab" ? customers[(round + 1) % customers.length] : order.customer}</strong></div></div>
+            <div className="speech-bubble">{mode === "lab" ? <><p>My magic oven is tilting!</p><div className="target-line">Make both baking pans level</div><small>No equation needed — read the movement and balance the ingredients.</small></> : <><p>{order.request}</p><div className="target-line">Make my treat equal <strong>{order.target}</strong></div><small>{order.challenge}</small></>}</div>
             <div className={`combo-badge ${combo > 1 ? "active" : ""}`}><span>COMBO</span><strong>×{Math.max(combo, 1)}</strong></div>
+            {(dishStage === "plated" || dishStage === "delivering") && <div className="dish-delivery" aria-live="polite"><span>{dishes[(round - 1) % dishes.length]}</span><small>{dishStage === "plated" ? "FRESHLY PLATED" : "DELIVERING!"}</small></div>}
           </div>
 
           <div className="workbench">
+            {mode === "lab" ? (
+              <div className="lab-layout">
+                <div className="balance-game">
+                  <div className="lab-heading"><span>OVEN BALANCE LAB</span><h2>Use every loose ingredient and level the beam</h2><small>Suggested moves: {labPuzzle.moves} · Your moves: {labMoves}</small></div>
+                  <div className={`balance-scale ${labLeftWeight > labRightWeight ? "tilt-left" : labRightWeight > labLeftWeight ? "tilt-right" : "level"}`}>
+                    <button className="scale-pan left-pan" onClick={() => placeLabPiece("left")} disabled={!selectedLabPiece || recipeSolved} aria-label="Place selected ingredient on the left pan">
+                      <span className="base-stack" aria-label="Fixed ingredients">{"●".repeat(labPuzzle.leftBase)}</span>
+                      <span className="placed-stack">{labPuzzle.pieces.filter((piece) => labPlacements[piece.id] === "left").map((piece) => <i key={piece.id}>{piece.emoji.repeat(piece.weight)}</i>)}</span>
+                      <strong>LEFT PAN</strong>
+                    </button>
+                    <div className="scale-post"><i /><strong>{labLeftWeight === labRightWeight ? "LEVEL" : "TILTING"}</strong></div>
+                    <button className="scale-pan right-pan" onClick={() => placeLabPiece("right")} disabled={!selectedLabPiece || recipeSolved} aria-label="Place selected ingredient on the right pan">
+                      <span className="base-stack" aria-label="Fixed ingredients">{"●".repeat(labPuzzle.rightBase)}</span>
+                      <span className="placed-stack">{labPuzzle.pieces.filter((piece) => labPlacements[piece.id] === "right").map((piece) => <i key={piece.id}>{piece.emoji.repeat(piece.weight)}</i>)}</span>
+                      <strong>RIGHT PAN</strong>
+                    </button>
+                  </div>
+                  <div className="loose-ingredients"><span>LOOSE INGREDIENTS</span><div>{labPuzzle.pieces.map((piece) => <button key={piece.id} className={`${selectedLabPiece === piece.id ? "selected" : ""} ${labPlacements[piece.id] ? "placed" : ""}`} onClick={() => chooseLabPiece(piece.id)} disabled={recipeSolved} aria-pressed={selectedLabPiece === piece.id}><span>{piece.emoji.repeat(piece.weight)}</span><small>{labPlacements[piece.id] ? `On ${labPlacements[piece.id]} pan · tap to move` : "Tap, then choose a pan"}</small></button>)}</div></div>
+                </div>
+                <aside className="lab-rules"><span>THE HIDDEN MATH</span><h3>Play first. Notice later.</h3><p>No numbers or operation signs are required. The oven teaches equality through movement, weight and conservation.</p><div><i>⚖️</i><strong>Balance</strong><small>Both sides must carry the same total weight.</small></div><div><i>🔄</i><strong>Rearrange</strong><small>Tap a placed ingredient to bring it back.</small></div><div><i>✨</i><strong>Discover</strong><small>Use fewer moves for a larger tip.</small></div></aside>
+              </div>
+            ) : (
             <div className="builder-layout">
               <div className="builder-main">
                 <div className="expression-board">
                   <div><span>YOUR EXPRESSION</span><strong>{expression || "Choose a number to begin"}</strong></div>
                   <div className={`value-orb ${currentValue === order.target ? "exact" : ""}`}><span>VALUE</span><strong>{currentValue === null ? "?" : Number(currentValue.toFixed(2))}</strong></div>
-                  <div className="builder-actions"><button onClick={undoToken} disabled={!tokens.length || recipeSolved}>Undo</button><button onClick={clearExpression} disabled={!tokens.length}>Clear</button></div>
                 </div>
+                <div className="builder-actions"><button onClick={undoToken} disabled={!tokens.length || recipeSolved}><span>↶</span> Undo last</button><button onClick={clearExpression} disabled={!tokens.length || recipeSolved}><span>✕</span> Clear all</button><small>Tap the last selected card to undo it</small></div>
 
-                <div className="shelf-heading"><div><span>1 · NUMBER CARDS</span><h2>{nextNeedsNumber ? "Choose a number" : "Number cards are waiting"}</h2></div><small>Each card can be used once</small></div>
+                <div className={`number-zone ${numberInputActive && !recipeSolved ? "input-focus" : ""}`}>
+                <div className="shelf-heading"><div><span>1 · NUMBER CARDS</span><h2>{numberInputActive ? "Choose a number" : "Choose an operation first"}</h2></div><small>{numberInputActive ? "Your turn: pick a card" : "Waiting for a sign"}</small></div>
                 <div className="number-grid">
                   {order.cards.map((card) => {
                     const used = usedCardIds.includes(card.id);
-                    return <button key={card.id} className={`number-card ${used ? "used" : ""}`} onClick={() => addNumber(card)} disabled={used || !nextNeedsNumber || recipeSolved} aria-label={`${card.name}, value ${card.value}${used ? ", used" : ""}`}><span aria-hidden="true">{card.emoji}</span><strong>{card.value}</strong><small>{card.name}</small></button>;
+                    const isLast = tokens[tokens.length - 1]?.kind === "number" && tokens[tokens.length - 1].id === card.id;
+                    return <button key={card.id} className={`number-card ${used ? "used" : ""} ${isLast ? "last-selected" : ""}`} onClick={() => addNumber(card)} disabled={(used && !isLast) || (!numberInputActive && !isLast) || recipeSolved} aria-label={`${card.name}, value ${card.value}${isLast ? ", last selected, tap to undo" : used ? ", used" : ""}`}><span aria-hidden="true">{card.emoji}</span><strong>{card.value}</strong><small>{isLast ? "tap to undo" : card.name}</small></button>;
                   })}
                 </div>
+                </div>
 
-                <div className="operator-row"><div><span>2 · OPERATION SIGNS</span><h2>{nextNeedsNumber ? "Choose a number first" : "Choose an operation"}</h2></div><div>{operators.map((operator) => <button key={operator} onClick={() => addOperator(operator)} disabled={nextNeedsNumber || recipeSolved} aria-label={`Add ${operator} to expression`}>{operator}</button>)}</div></div>
+                <div className={`operator-row ${operatorInputActive && !recipeSolved ? "input-focus" : ""} ${autoOperator ? "auto-operator" : ""}`}><div><span>2 · OPERATION SIGNS</span><h2>{autoOperator ? `${autoOperator} is added automatically` : operatorInputActive ? "Choose an operation" : "Choose a number first"}</h2></div><div>{operators.map((operator) => <button key={operator} onClick={() => addOperator(operator)} disabled={!operatorInputActive || recipeSolved} aria-label={`Add ${operator} to expression`}>{operator}</button>)}</div></div>
               </div>
 
               <aside className="recipe-book" aria-label="Discovered recipes">
@@ -637,15 +839,21 @@ export default function Home() {
                 <div className="strategy-hints"><span>TRY A NEW STRUCTURE</span><div>{["Pair", "3+ cards", "Subtract", "Multiply", "Divide", "Mixed"].map((label) => <i key={label}>{label}</i>)}</div></div>
               </aside>
             </div>
+            )}
 
             <div className={`coach-bar ${messageTone}`}>
               <div className="coach-icon" aria-hidden="true">👩🏽‍🍳</div><div><span>CHEF MIRA SAYS</span><p>{message}</p></div>
               <div className="coach-buttons">
-                {!recipeSolved && <>
-                  {foundRecipes.length > 0 && <button className="secondary-button" onClick={serveOrder}>Finish exploring →</button>}
+                {mode !== "lab" && !recipeSolved && <>
+                  {foundRecipes.length > 0 && <button className="secondary-button" onClick={finishExploring}>Finish exploring →</button>}
                   <button className="serve-button" onClick={checkRecipe} disabled={!tokens.length}>Check recipe</button>
                 </>}
-                {recipeSolved && <><button className="secondary-button" onClick={findAnotherWay}>Find another way</button><button className="serve-button" onClick={serveOrder}>Serve now →</button></>}
+                {recipeSolved && dishStage === "ready" && <>
+                  {mode !== "lab" && <button className="secondary-button" onClick={findAnotherWay}>Find another way</button>}
+                  <button className="serve-button" onClick={bakeDish}>Bake this dish →</button>
+                </>}
+                {recipeSolved && dishStage === "plated" && <button className="serve-button deliver-button" onClick={deliverOrder}>Deliver order →</button>}
+                {dishStage === "delivering" && <strong className="delivery-status">Order on its way!</strong>}
               </div>
             </div>
           </div>
@@ -657,13 +865,13 @@ export default function Home() {
         <section className="result-card" aria-labelledby="result-title">
           <div className="result-stars" aria-hidden="true">✦ ★ ✦</div><p className="section-kicker">SHIFT COMPLETE</p><h1 id="result-title">Your thinking made the bakery sparkle.</h1>
           <div className="score-medal"><span>TOTAL COINS</span><strong>{score}</strong></div>
-          <div className="result-stats"><div><span>Orders served</span><strong>{ordersServed} / {totalOrders}</strong></div><div><span>Best combo</span><strong>×{Math.max(bestCombo, 1)}</strong></div><div><span>Fastest recipe</span><strong>{fastestOrder ?? "—"}s</strong></div><div><span>Strategies found</span><strong>{Object.values(strategyCounts).reduce((sum, value) => sum + value, 0)}</strong></div></div>
+          <div className="result-stats"><div><span>Orders served</span><strong>{ordersServed}{totalOrders === null ? "" : ` / ${totalOrders}`}</strong></div><div><span>Best combo</span><strong>×{Math.max(bestCombo, 1)}</strong></div><div><span>Fastest recipe</span><strong>{fastestOrder ?? "—"}s</strong></div><div><span>Strategies found</span><strong>{Object.values(strategyCounts).reduce((sum, value) => sum + value, 0)}</strong></div></div>
           <div className="thinking-report"><span>YOUR THINKING REPORT</span>{topStrategies.length ? topStrategies.map(([strategy, count]) => <div key={strategy}><strong>{strategy}</strong><span>{count} recipe{count > 1 ? "s" : ""}</span></div>) : <p>Try another shift to fill your strategy report.</p>}</div>
           <div className="result-actions"><button className="secondary-button" onClick={() => setPhase("menu")}>Change mode</button><button className="primary-button" onClick={startGame}>Play again <span>↻</span></button></div>
         </section>
       )}
 
-      <footer><span>Educational game prototype · P0 learning systems</span><span>Calculate · connect · explain</span></footer>
+      <footer><span>Educational game prototype · P0.1</span><span>Music: First Light Particles by Yoiyami · CC0</span></footer>
     </main>
   );
 }

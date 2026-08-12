@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
@@ -13,7 +13,7 @@ async function render() {
   );
 }
 
-test("server-renders the P0 Magic Math Bakery menu", async () => {
+test("server-renders the P0.1 Magic Math Bakery menu", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
@@ -22,15 +22,27 @@ test("server-renders the P0 Magic Math Bakery menu", async () => {
   assert.match(html, /Bake the number/);
   assert.match(html, /Bakery Adventure/);
   assert.match(html, /Quick Practice/);
-  assert.match(html, /Number Lab/);
+  assert.match(html, /Oven Balance Lab/);
+  assert.match(html, /Endless Shift/);
   assert.match(html, /Music on/);
   assert.match(html, /og\.png/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
-test("P0.1 keeps safe exits available during play", async () => {
+test("P0.1 includes guided inputs, delivery, lab play, and safe exits", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /Exit to menu/);
   assert.match(source, /Finish exploring/);
-  assert.match(source, /setInterval\(playNext, 4800\)/);
+  assert.match(source, /first-light-particles\.ogg/);
+  assert.match(source, /practiceOperators\.length === 1/);
+  assert.match(source, /input-focus/);
+  assert.match(source, /Deliver order/);
+  assert.match(source, /OVEN BALANCE LAB/);
+  assert.doesNotMatch(source, /playAmbientChord|setInterval\(playNext/);
+});
+
+test("First Light Particles web audio asset is bundled", async () => {
+  const audio = await stat(new URL("../public/audio/first-light-particles.ogg", import.meta.url));
+  assert.ok(audio.size > 1_000_000);
+  assert.ok(audio.size < 3_000_000);
 });

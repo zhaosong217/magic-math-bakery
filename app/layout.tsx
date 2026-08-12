@@ -10,7 +10,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: "Magic Math Bakery — One Target, Many Recipes",
-    description: "Build expressions, discover multiple strategies, and train flexible number thinking in a playful maths bakery.",
+    description: "Build recipes, deliver dishes, and explore equality through a playful oven-balance puzzle in this P0.1 maths game.",
     openGraph: {
       title: "Magic Math Bakery",
       description: "One target. Many recipes.",
