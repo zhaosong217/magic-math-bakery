@@ -6,7 +6,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 type Mode = "adventure" | "practice" | "lab";
 type Operation = "add" | "subtract" | "multiply" | "divide" | "mixed";
 type Operator = "+" | "−" | "×" | "÷";
-type Phase = "splash" | "menu" | "playing" | "finished";
+type Phase = "splash" | "modes" | "journey" | "playing" | "finished";
 type SessionLevel = "apprentice" | "baker" | "master" | "endless";
 type DishStage = "building" | "ready" | "plated" | "delivering";
 
@@ -90,14 +90,12 @@ const operatorInfo: Record<Operator, { operation: Exclude<Operation, "mixed">; t
 const allOperators = Object.keys(operatorInfo) as Operator[];
 const dishes = ["🧁", "🍰", "🥧", "🍮", "🍩", "🥐"];
 const journeyNodes = [
-  { icon: "🍓", title: "Make 10", skill: "Number pairs", color: "coral" },
-  { icon: "🧁", title: "Many Recipes", skill: "Break apart numbers", color: "gold" },
-  { icon: "🍪", title: "Take Away", skill: "Subtraction", color: "teal" },
-  { icon: "🥐", title: "Equal Groups", skill: "Multiplication", color: "violet" },
-  { icon: "🍰", title: "Share Fairly", skill: "Division", color: "blue" },
-  { icon: "⚖️", title: "Balance Oven", skill: "Equality", color: "mint" },
-  { icon: "✨", title: "Mixed Feast", skill: "Choose a strategy", color: "coral" },
-  { icon: "👑", title: "Grand Bake", skill: "Chapter challenge", color: "gold" },
+  { icon: "🍓", title: "Make 5", skill: "Small number pairs", color: "coral" },
+  { icon: "🧁", title: "Make 10", skill: "Friendly addition", color: "gold" },
+  { icon: "🍪", title: "Number Pairs", skill: "Break apart numbers", color: "teal" },
+  { icon: "🍒", title: "Add a Step", skill: "Addition within 20", color: "violet" },
+  { icon: "🍰", title: "Take Away", skill: "Gentle subtraction", color: "blue" },
+  { icon: "👑", title: "Plus & Minus Bake", skill: "Chapter challenge", color: "gold" },
 ];
 
 const labDifficulty: Record<Exclude<SessionLevel, "endless">, LabDifficulty> = {
@@ -128,11 +126,7 @@ function makeCards(values: number[], round: number) {
 }
 
 function adventureOperation(round: number): Operation {
-  if (round <= 2) return "add";
-  if (round <= 4) return "subtract";
-  if (round <= 6) return "multiply";
-  if (round === 7) return "divide";
-  return "mixed";
+  return round <= 4 ? "add" : "subtract";
 }
 
 function createStandardOrder(round: number, operation: Operation, operators = allowedOperators(operation)): Order {
@@ -141,14 +135,15 @@ function createStandardOrder(round: number, operation: Operation, operators = al
   let challenge = "Build one correct recipe.";
 
   if (operation === "add") {
-    const a = randomInt(2, Math.min(9, 4 + round));
-    const b = randomInt(2, 9);
+    const maxAddend = round <= 1 ? 4 : round <= 3 ? 6 : 9;
+    const a = randomInt(1, maxAddend);
+    const b = randomInt(1, maxAddend);
     target = a + b;
     solution = [a, b];
     challenge = round > 1 ? "Try a three-card recipe after your first answer." : "Warm up with two number cards.";
   } else if (operation === "subtract") {
-    target = randomInt(3, 12);
-    const removed = randomInt(2, 8);
+    target = randomInt(1, round <= 2 ? 6 : round <= 5 ? 10 : 14);
+    const removed = randomInt(1, round <= 2 ? 4 : round <= 5 ? 6 : 9);
     solution = [target + removed, removed];
     challenge = "Start with the larger number, then take some away.";
   } else if (operation === "multiply") {
@@ -172,7 +167,7 @@ function createStandardOrder(round: number, operation: Operation, operators = al
   }
 
   const values = [...solution];
-  while (values.length < 7) values.push(randomInt(1, Math.max(9, Math.min(20, target + 3))));
+  while (values.length < 5) values.push(randomInt(1, Math.max(6, Math.min(20, target + 3))));
   const timeLimit = operationInfo[operation].time;
 
   return {
@@ -189,14 +184,14 @@ function createStandardOrder(round: number, operation: Operation, operators = al
 
 function createTutorialOrder(): Order {
   return {
-    target: 12,
-    cards: makeCards([4, 8, 3, 5, 6, 7, 9], 1),
+    target: 5,
+    cards: makeCards([2, 3, 1, 4, 5], 1),
     operation: "add",
     operators: ["+"],
     timeLimit: 60,
     customer: "Milo",
     request: "Will you bake my first number cake?",
-    challenge: "Follow Chef Mira’s glowing hand: 4 + 8 makes 12.",
+    challenge: "Follow Chef Mira’s glowing hand: 2 + 3 makes 5.",
   };
 }
 
@@ -228,7 +223,18 @@ function endlessLabDifficulty(round: number): LabDifficulty {
 }
 
 function createLabPuzzle(round: number, level: SessionLevel, seen = new Set<string>(), sessionSeed = 0): LabPuzzle {
-  const difficulty = level === "endless" ? endlessLabDifficulty(round) : labDifficulty[level];
+  const levelDifficulty = level === "endless" ? endlessLabDifficulty(round) : labDifficulty[level];
+  const warmup = round <= 2
+    ? { maxPieces: 3, maxWeight: 2, maxBase: 5 }
+    : round <= 4
+      ? { maxPieces: 4, maxWeight: 3, maxBase: 8 }
+      : { maxPieces: 5, maxWeight: levelDifficulty.maxWeight, maxBase: levelDifficulty.maxBase };
+  const difficulty: LabDifficulty = {
+    minPieces: Math.min(levelDifficulty.minPieces, warmup.maxPieces),
+    maxPieces: Math.min(levelDifficulty.maxPieces, warmup.maxPieces, 5),
+    maxWeight: Math.min(levelDifficulty.maxWeight, warmup.maxWeight),
+    maxBase: Math.min(levelDifficulty.maxBase, warmup.maxBase),
+  };
   const levelSeed = { apprentice: 1103, baker: 2207, master: 3313, endless: 4421 }[level];
 
   for (let attempt = 0; attempt < 1000; attempt += 1) {
@@ -343,7 +349,7 @@ export default function Home() {
   const [phase, setPhase] = useState<Phase>("splash");
   const [mode, setMode] = useState<Mode>("adventure");
   const [practiceOperators, setPracticeOperators] = useState<Operator[]>(["+"]);
-  const [sessionLevel, setSessionLevel] = useState<SessionLevel>("baker");
+  const [sessionLevel, setSessionLevel] = useState<SessionLevel>("apprentice");
   const [round, setRound] = useState(1);
   const [order, setOrder] = useState<Order>(() => createOrder(1, "adventure", ["+"]));
   const [labPuzzle, setLabPuzzle] = useState<LabPuzzle>(() => createLabPuzzle(1, "baker"));
@@ -595,7 +601,7 @@ export default function Home() {
     };
   }
 
-  function startGame() {
+  function startGame(forcedRound?: number) {
     ensureAudio();
     if (soundOn) {
       if (!musicRef.current) {
@@ -606,7 +612,7 @@ export default function Home() {
       }
       void musicRef.current.play().catch(() => undefined);
     }
-    const firstRound = mode === "adventure" && journeyProgress < journeyNodes.length ? journeyProgress + 1 : 1;
+    const firstRound = forcedRound ?? (mode === "adventure" && journeyProgress < journeyNodes.length ? journeyProgress + 1 : 1);
     setRound(firstRound);
     setScore(0);
     setCombo(0);
@@ -617,6 +623,7 @@ export default function Home() {
     setCelebrating(false);
     const needsTutorial = mode === "adventure"
       && journeyProgress === 0
+      && firstRound === 1
       && window.localStorage.getItem("magic-math-tutorial") !== "done";
     setTutorialStep(needsTutorial ? 0 : null);
     if (mode === "lab") {
@@ -637,12 +644,12 @@ export default function Home() {
 
   function addNumber(card: NumberCard) {
     if (recipeSolved) return;
-    if (tutorialStep === 0 && card.value !== 4) {
-      setMessage("Find the glowing strawberry card with number 4.");
+    if (tutorialStep === 0 && card.value !== 2) {
+      setMessage("Find the glowing card with number 2.");
       return;
     }
-    if (tutorialStep === 2 && card.value !== 8) {
-      setMessage("Great start! Now drag the glowing number 8.");
+    if (tutorialStep === 2 && card.value !== 3) {
+      setMessage("Great start! Now drag the glowing number 3.");
       return;
     }
     const isLastSelected = tokens[tokens.length - 1]?.kind === "number" && tokens[tokens.length - 1].id === card.id;
@@ -887,7 +894,7 @@ export default function Home() {
     setCelebrating(false);
     setTokens([]);
     stopMusic();
-    setPhase("menu");
+    setPhase("modes");
   }
 
   function finishOrExit() {
@@ -968,13 +975,13 @@ export default function Home() {
           <div className="garden-bakery" aria-hidden="true"><span>🍰</span><strong>1 + 2 = 3</strong></div>
           <div className="garden-friends" aria-hidden="true"><span>🐰</span><span>👩🏽‍🍳</span><span>🐿️</span></div>
           <div className="splash-copy"><small>MAGIC MATH ADVENTURE</small><h1 id="splash-title">Math Garden</h1><p>Grow ideas. Bake numbers. Play with maths.</p></div>
-          <button className="splash-start" onClick={() => setPhase("menu")} aria-label="Start Math Garden"><span aria-hidden="true">▶</span></button>
+          <button className="splash-start" onClick={() => setPhase("modes")} aria-label="Start Math Garden"><span aria-hidden="true">▶</span></button>
           <small className="tap-to-start">TAP TO START</small>
         </div>
       </section>}
 
       {phase !== "splash" && <header className="brand-bar">
-        <button className="brand-button" onClick={() => phase === "playing" ? exitToMenu() : setPhase("menu")} aria-label="Magic Math Bakery home">
+        <button className="brand-button" onClick={() => phase === "playing" ? exitToMenu() : setPhase("modes")} aria-label="Math Garden mode selection">
           <span className="brand-mark" aria-hidden="true">✦</span>
           <span><small>MAGIC MATH BAKERY</small><strong>Math Garden</strong></span>
         </button>
@@ -983,43 +990,35 @@ export default function Home() {
         </button>
       </header>}
 
-      {phase === "menu" && (
-        <section className="journey-home" aria-labelledby="menu-title">
-          <div className="journey-intro">
-            <div><p className="section-kicker">YOUR BAKERY ADVENTURE</p><h1 id="menu-title">Learn maths by<br />baking magic.</h1><p>Drag number ingredients into recipes, serve every customer, and light up the path to the Grand Bake.</p></div>
-            <div className="how-it-works" aria-label="How to play"><span><i>1</i><b>See the goal</b><small>Read the customer’s target.</small></span><span><i>2</i><b>Drag a recipe</b><small>Move numbers and signs into place.</small></span><span><i>3</i><b>Bake & unlock</b><small>Earn stars and open the next stop.</small></span></div>
+      {phase === "modes" && <section className="mode-select-home" aria-labelledby="mode-title">
+        <div className="mode-select-intro"><p className="section-kicker">CHOOSE HOW TO PLAY</p><h1 id="mode-title">Where shall we grow today?</h1><p>Pick one big activity. You can always return here and choose another.</p></div>
+        <div className="big-mode-grid">
+          <button className="big-mode-card journey-choice" onClick={() => { setMode("adventure"); setPhase("journey"); }}><span>🗺️</span><div><small>STEP-BY-STEP</small><strong>Journey</strong><p>A gentle path using only addition and subtraction.</p></div><i>VIEW MAP →</i></button>
+          <button className={`big-mode-card practice-choice ${mode === "practice" ? "selected" : ""}`} onClick={() => setMode("practice")}><span>⚡</span><div><small>CHOOSE A SKILL</small><strong>Practice</strong><p>Pick one or more signs and build number recipes.</p></div><i>{mode === "practice" ? "SELECTED ✓" : "CHOOSE →"}</i></button>
+          <button className={`big-mode-card balance-choice ${mode === "lab" ? "selected" : ""}`} onClick={() => setMode("lab")}><span>⚖️</span><div><small>PUZZLE PLAY</small><strong>Balance</strong><p>Move small food groups until both oven pans match.</p></div><i>{mode === "lab" ? "SELECTED ✓" : "CHOOSE →"}</i></button>
+        </div>
+        {(mode === "practice" || mode === "lab") && <div className="mode-setup-panel">
+          <div className="chef-welcome"><span aria-hidden="true">👩🏽‍🍳</span><div><small>CHEF MIRA SAYS</small><strong>{mode === "practice" ? "Choose the signs you already know." : "We will begin with tiny weights and only a few foods."}</strong></div></div>
+          {mode === "practice" && <div className="operation-picker compact"><span>YOUR SIGNS</span><div>{allOperators.map((operator) => <button key={operator} className={practiceOperators.includes(operator) ? "selected" : ""} onClick={() => togglePracticeOperator(operator)} aria-pressed={practiceOperators.includes(operator)}><strong>{operator}</strong><small>{operatorInfo[operator].title}</small></button>)}</div><p>{practiceOperators.length === 1 ? `${practiceOperators[0]} is placed automatically.` : "Drag a sign when the recipe asks for one."}</p></div>}
+          <div className="session-picker compact"><span>HOW LONG?</span><div>{(Object.keys(sessionLevels) as SessionLevel[]).map((level) => <button key={level} className={sessionLevel === level ? "selected" : ""} onClick={() => setSessionLevel(level)} aria-pressed={sessionLevel === level}><strong>{sessionLevels[level].title}</strong><small>{sessionLevels[level].orders === null ? "∞" : sessionLevels[level].orders}</small></button>)}</div></div>
+          <button className="primary-button mission-start" onClick={() => startGame()}><span>{mode === "lab" ? "⚖️" : "⚡"}</span>{mode === "lab" ? "Start Balance" : "Start Practice"}</button>
+        </div>}
+      </section>}
+
+      {phase === "journey" && <section className="journey-home" aria-labelledby="menu-title">
+        <button className="journey-back" onClick={() => setPhase("modes")}>← Choose another mode</button>
+        <div className="journey-intro starter-intro">
+          <div><p className="section-kicker">STARTER GARDEN · + AND − ONLY</p><h1 id="menu-title">One small step<br />at a time.</h1><p>This first path stays with friendly addition and subtraction. Multiplication and division remain in Practice until your child is ready.</p></div>
+          <div className="how-it-works" aria-label="How Journey works"><span><i>1</i><b>Tap your stop</b><small>The glowing level starts immediately.</small></span><span><i>2</i><b>Solve 5 cards</b><small>No crowded ingredient shelf.</small></span><span><i>3</i><b>Open the path</b><small>One completed stop unlocks the next.</small></span></div>
+        </div>
+        <div className="journey-layout">
+          <div className="journey-map">
+            <div className="map-heading"><div><span>CHAPTER 1 · BEGINNER</span><h2>Plus & Minus Garden</h2></div><strong>{journeyProgress} / {journeyNodes.length} ★</strong></div>
+            <div className="map-path" aria-label="Addition and subtraction level path">{journeyNodes.map((node, index) => { const completed = index < journeyProgress; const current = index === journeyProgress || (journeyProgress === journeyNodes.length && index === journeyNodes.length - 1); return <button key={node.title} className={`path-stop ${node.color} ${completed ? "completed" : ""} ${current ? "current" : ""}`} onClick={() => startGame(index + 1)} disabled={!completed && !current} aria-label={`${node.title}, ${completed ? "completed, replay level" : current ? "current level, play now" : "locked"}`}><span>{completed ? "✓" : node.icon}</span><div><strong>{node.title}</strong><small>{node.skill}</small></div>{(completed || current) && <i>{completed ? "REPLAY" : "PLAY"}</i>}{!completed && !current && <i>🔒</i>}</button>; })}</div>
           </div>
-
-          <div className="journey-layout">
-            <div className="journey-map">
-              <div className="map-heading"><div><span>CHAPTER 1</span><h2>The Number Bakery</h2></div><strong>{journeyProgress} / {journeyNodes.length} ★</strong></div>
-              <div className="map-path" aria-label="Bakery Adventure level path">
-                {journeyNodes.map((node, index) => {
-                  const completed = index < journeyProgress;
-                  const current = index === journeyProgress || (journeyProgress === journeyNodes.length && index === journeyNodes.length - 1);
-                  return <button key={node.title} className={`path-stop ${node.color} ${completed ? "completed" : ""} ${current ? "current" : ""}`} onClick={() => setMode("adventure")} disabled={!completed && !current} aria-label={`${node.title}, ${completed ? "completed" : current ? "current level" : "locked"}`}><span>{completed ? "✓" : node.icon}</span><div><strong>{node.title}</strong><small>{node.skill}</small></div>{current && <i>PLAY</i>}{!completed && !current && <i>🔒</i>}</button>;
-                })}
-              </div>
-            </div>
-
-            <aside className="mission-dock">
-              <div className="chef-welcome"><span aria-hidden="true">👩🏽‍🍳</span><div><small>CHEF MIRA SAYS</small><strong>{mode === "adventure" ? journeyProgress === journeyNodes.length ? "The whole bakery is glowing!" : `Next up: ${journeyNodes[journeyProgress].title}` : mode === "practice" ? "Pick your signs and sharpen your skills." : "Can you make the oven perfectly level?"}</strong></div></div>
-              <div className="play-mode-tabs" role="radiogroup" aria-label="Choose play mode">
-                <button className={mode === "adventure" ? "selected" : ""} onClick={() => setMode("adventure")} role="radio" aria-checked={mode === "adventure"}><span>🗺️</span><strong>Journey</strong><small>Follow the path</small></button>
-                <button className={mode === "practice" ? "selected" : ""} onClick={() => setMode("practice")} role="radio" aria-checked={mode === "practice"}><span>⚡</span><strong>Practice</strong><small>Choose your signs</small></button>
-                <button className={mode === "lab" ? "selected" : ""} onClick={() => setMode("lab")} role="radio" aria-checked={mode === "lab"}><span>⚖️</span><strong>Balance</strong><small>Play with weight</small></button>
-              </div>
-
-              {mode === "practice" && <div className="operation-picker compact"><span>YOUR SIGNS</span><div>{allOperators.map((operator) => <button key={operator} className={practiceOperators.includes(operator) ? "selected" : ""} onClick={() => togglePracticeOperator(operator)} aria-pressed={practiceOperators.includes(operator)}><strong>{operator}</strong><small>{operatorInfo[operator].title}</small></button>)}</div><p>{practiceOperators.length === 1 ? `${practiceOperators[0]} is placed automatically.` : "Drag a sign when the recipe asks for one."}</p></div>}
-
-              {mode !== "adventure" && <div className="session-picker compact"><span>HOW LONG?</span><div>{(Object.keys(sessionLevels) as SessionLevel[]).map((level) => <button key={level} className={sessionLevel === level ? "selected" : ""} onClick={() => setSessionLevel(level)} aria-pressed={sessionLevel === level}><strong>{sessionLevels[level].title}</strong><small>{sessionLevels[level].orders === null ? "∞" : sessionLevels[level].orders}</small></button>)}</div></div>}
-
-              <button className="primary-button mission-start" onClick={startGame}><span>{mode === "lab" ? "⚖️" : mode === "practice" ? "⚡" : "▶"}</span>{mode === "adventure" ? journeyProgress === journeyNodes.length ? "Replay the journey" : "Continue adventure" : mode === "lab" ? "Open Balance Lab" : "Start quick practice"}</button>
-              <div className="mini-legend"><span><i className="done" />Complete</span><span><i className="now" />Current</span><span><i className="later" />Coming next</span></div>
-            </aside>
-          </div>
-        </section>
-      )}
+          <aside className="mission-dock journey-guide"><div className="chef-welcome"><span aria-hidden="true">👩🏽‍🍳</span><div><small>YOUR NEXT STOP</small><strong>{journeyProgress === journeyNodes.length ? "Replay any colourful stop!" : journeyNodes[journeyProgress].title}</strong></div></div><div className="starter-badge"><span>🌱</span><strong>Made for beginners</strong><small>Only + and − · five food cards · gentle number growth</small></div><button className="primary-button mission-start" onClick={() => startGame()}><span>▶</span>{journeyProgress === journeyNodes.length ? "Replay from the start" : "Play the glowing level"}</button><div className="mini-legend"><span><i className="done" />Complete</span><span><i className="now" />Current</span><span><i className="later" />Locked</span></div></aside>
+        </div>
+      </section>}
 
       {phase === "playing" && (
         <section className={`play-area ${celebrating ? "is-celebrating" : ""}`} aria-live="polite">
@@ -1043,7 +1042,7 @@ export default function Home() {
           </div>
 
           <div className="workbench">
-            {tutorialStep !== null && mode === "adventure" && <div className="tutorial-ribbon" role="status"><span className="tutorial-chef">👩🏽‍🍳</span><div><small>YOUR FIRST RECIPE · STEP {tutorialStep + 1} OF 4</small><strong>{tutorialStep === 0 ? "Drag number 4 into the recipe bar" : tutorialStep === 1 ? "Drag the + sign into the recipe" : tutorialStep === 2 ? "Now drag number 8" : "Perfect — check your recipe!"}</strong><p>{tutorialStep < 3 ? "You can also tap the glowing tile." : "4 + 8 makes the customer’s target: 12."}</p></div><div className="tutorial-dots">{[0, 1, 2, 3].map((step) => <i key={step} className={step <= tutorialStep ? "active" : ""} />)}</div></div>}
+            {tutorialStep !== null && mode === "adventure" && <div className="tutorial-ribbon" role="status"><span className="tutorial-chef">👩🏽‍🍳</span><div><small>YOUR FIRST RECIPE · STEP {tutorialStep + 1} OF 4</small><strong>{tutorialStep === 0 ? "Drag number 2 into the recipe bar" : tutorialStep === 1 ? "Drag the + sign into the recipe" : tutorialStep === 2 ? "Now drag number 3" : "Perfect — check your recipe!"}</strong><p>{tutorialStep < 3 ? "You can also tap the glowing tile." : "2 + 3 makes the customer’s target: 5."}</p></div><div className="tutorial-dots">{[0, 1, 2, 3].map((step) => <i key={step} className={step <= tutorialStep ? "active" : ""} />)}</div></div>}
             {mode === "lab" ? (
               <div className="lab-layout">
                 <div className="balance-game">
@@ -1089,7 +1088,7 @@ export default function Home() {
                   {order.cards.map((card) => {
                     const used = usedCardIds.includes(card.id);
                     const isLast = tokens[tokens.length - 1]?.kind === "number" && tokens[tokens.length - 1].id === card.id;
-                    const tutorialTarget = (tutorialStep === 0 && card.value === 4) || (tutorialStep === 2 && card.value === 8);
+                    const tutorialTarget = (tutorialStep === 0 && card.value === 2) || (tutorialStep === 2 && card.value === 3);
                     return <button key={card.id} className={`number-card draggable ${used ? "used" : ""} ${isLast ? "last-selected" : ""} ${tutorialTarget ? "tutorial-target" : ""}`} {...dragProps({ kind: "number", id: card.id, label: `${card.emoji} ${card.value}` })} onClick={() => { if (!ignoreDragClick()) addNumber(card); }} disabled={(used && !isLast) || (!numberInputActive && !isLast) || recipeSolved} aria-label={`${card.name}, value ${card.value}${isLast ? ", last selected, tap to undo" : used ? ", used" : ""}`}><span aria-hidden="true">{card.emoji}</span><strong>{card.value}</strong><small>{tutorialTarget ? "drag me" : isLast ? "tap to undo" : card.name}</small></button>;
                   })}
                 </div>
@@ -1133,7 +1132,7 @@ export default function Home() {
           <div className="score-medal"><span>TOTAL COINS</span><strong>{score}</strong></div>
           <div className="result-stats"><div><span>Orders served</span><strong>{ordersServed}{totalOrders === null ? "" : ` / ${totalOrders}`}</strong></div><div><span>Best combo</span><strong>×{Math.max(bestCombo, 1)}</strong></div><div><span>Fastest recipe</span><strong>{fastestOrder ?? "—"}s</strong></div><div><span>Strategies found</span><strong>{Object.values(strategyCounts).reduce((sum, value) => sum + value, 0)}</strong></div></div>
           <div className="thinking-report"><span>YOUR THINKING REPORT</span>{topStrategies.length ? topStrategies.map(([strategy, count]) => <div key={strategy}><strong>{strategy}</strong><span>{count} recipe{count > 1 ? "s" : ""}</span></div>) : <p>Try another shift to fill your strategy report.</p>}</div>
-          <div className="result-actions"><button className="secondary-button" onClick={() => setPhase("menu")}>Change mode</button><button className="primary-button" onClick={startGame}>Play again <span>↻</span></button></div>
+          <div className="result-actions"><button className="secondary-button" onClick={() => setPhase("modes")}>Change mode</button><button className="primary-button" onClick={() => startGame()}>Play again <span>↻</span></button></div>
         </section>
       )}
 

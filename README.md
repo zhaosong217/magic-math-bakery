@@ -8,15 +8,15 @@ The game opens on a **Math Garden** cartoon title screen. A gently pulsing play 
 
 ### Bakery Adventure
 
-The home screen is now a visual journey map. Completed stops remain colourful, the current stop glows, and future skills stay muted until they are unlocked. First-time players receive a four-step interactive recipe tutorial.
+After the title screen, players first choose Journey, Practice, or Balance. Journey then opens its own visual roadmap, where every colourful unlocked stop starts directly when tapped. The beginner chapter uses addition and subtraction only. First-time players receive a four-step interactive recipe tutorial.
 
 ### Quick Practice
 
-Players select one or several signs from `+`, `−`, `×`, and `÷`. Number ingredients and operation signs can be dragged into the recipe bar on mouse or touch devices, while tapping remains available as a fallback. Every order has an individual bonus clock.
+Players select one or several signs from `+`, `−`, `×`, and `÷`. Number ingredients and operation signs can be dragged into the recipe bar on mouse or touch devices, while tapping remains available as a fallback. Every order has an individual bonus clock and no more than five number cards.
 
 ### Oven Balance Lab
 
-This equation-free puzzle turns equality into a physical rule. Players drag ingredient clusters directly onto or between two oven pans, observe a damped beam movement, and use every piece to achieve balance in as few moves as possible.
+This equation-free puzzle turns equality into a physical rule. Players drag ingredient clusters directly onto or between two oven pans, observe a damped beam movement, and use every piece to achieve balance in as few moves as possible. Every session begins with small fixed weights and three food groups, then grows gradually without exceeding five groups.
 
 ## Included systems
 
