@@ -395,7 +395,7 @@ export default function Home() {
     .map((token) => token.id);
   const nextNeedsNumber = !tokens.length || tokens[tokens.length - 1].kind === "operator";
   const operators = order.operators;
-  const autoOperator = mode === "practice" && practiceOperators.length === 1 ? practiceOperators[0] : null;
+  const autoOperator = order.operators.length === 1 ? order.operators[0] : null;
   const numberInputActive = Boolean(autoOperator) || nextNeedsNumber;
   const operatorInputActive = !autoOperator && !nextNeedsNumber;
   const labLeftWeight = labPuzzle.leftBase + labPuzzle.pieces
@@ -443,7 +443,7 @@ export default function Home() {
     if (!musicRef.current) {
       const music = new Audio("/audio/first-light-particles.ogg");
       music.loop = true;
-      music.volume = 0.16;
+      music.volume = 0.08;
       musicRef.current = music;
     }
     void musicRef.current.play().catch(() => undefined);
@@ -508,7 +508,7 @@ export default function Home() {
       if (!musicRef.current) {
         const music = new Audio("/audio/first-light-particles.ogg");
         music.loop = true;
-        music.volume = 0.16;
+        music.volume = 0.08;
         musicRef.current = music;
       }
       if (phase === "playing") void musicRef.current.play().catch(() => undefined);
@@ -607,7 +607,7 @@ export default function Home() {
       if (!musicRef.current) {
         const music = new Audio("/audio/first-light-particles.ogg");
         music.loop = true;
-        music.volume = 0.16;
+        music.volume = 0.08;
         musicRef.current = music;
       }
       void musicRef.current.play().catch(() => undefined);
@@ -665,7 +665,7 @@ export default function Home() {
       ? `${autoOperator} was added automatically. Choose another number or check your recipe.`
       : "Good choice. The operation signs are glowing — choose one next.");
     setMessageTone("neutral");
-    if (tutorialStep === 0) setTutorialStep(1);
+    if (tutorialStep === 0) setTutorialStep(autoOperator ? 2 : 1);
     else if (tutorialStep === 2) setTutorialStep(3);
     playTone([520], 0.08, 0.035);
   }
@@ -683,7 +683,7 @@ export default function Home() {
   function undoToken() {
     if (recipeSolved) return;
     setTokens((current) => autoOperator && current.length > 1 ? current.slice(0, -2) : current.slice(0, -1));
-    setTutorialStep((current) => current === null ? null : Math.max(0, current - 1));
+    setTutorialStep((current) => current === null ? null : current === 3 ? 2 : 0);
     setMessage("Last choice removed. Pick again when you are ready.");
     setMessageTone("neutral");
     playTone([420], 0.07, 0.025);
@@ -1042,7 +1042,7 @@ export default function Home() {
           </div>
 
           <div className="workbench">
-            {tutorialStep !== null && mode === "adventure" && <div className="tutorial-ribbon" role="status"><span className="tutorial-chef">👩🏽‍🍳</span><div><small>YOUR FIRST RECIPE · STEP {tutorialStep + 1} OF 4</small><strong>{tutorialStep === 0 ? "Drag number 2 into the recipe bar" : tutorialStep === 1 ? "Drag the + sign into the recipe" : tutorialStep === 2 ? "Now drag number 3" : "Perfect — check your recipe!"}</strong><p>{tutorialStep < 3 ? "You can also tap the glowing tile." : "2 + 3 makes the customer’s target: 5."}</p></div><div className="tutorial-dots">{[0, 1, 2, 3].map((step) => <i key={step} className={step <= tutorialStep ? "active" : ""} />)}</div></div>}
+            {tutorialStep !== null && mode === "adventure" && <div className="tutorial-ribbon" role="status"><span className="tutorial-chef">👩🏽‍🍳</span><div><small>YOUR FIRST RECIPE · STEP {tutorialStep === 0 ? 1 : tutorialStep === 2 ? 2 : 3} OF 3</small><strong>{tutorialStep === 0 ? "Drag number 2 into the recipe bar" : tutorialStep === 2 ? "+ is automatic — now drag number 3" : "Perfect — check your recipe!"}</strong><p>{tutorialStep < 3 ? "You can also tap the glowing tile." : "2 + 3 makes the customer’s target: 5."}</p></div><div className="tutorial-dots">{[0, 2, 3].map((step) => <i key={step} className={step <= tutorialStep ? "active" : ""} />)}</div></div>}
             {mode === "lab" ? (
               <div className="lab-layout">
                 <div className="balance-game">
@@ -1115,7 +1115,6 @@ export default function Home() {
                   {foundRecipes.length > 0 && <button className="secondary-button" onClick={finishExploring}>Finish exploring →</button>}
                   <button className={`serve-button ${tutorialStep === 3 ? "tutorial-target" : ""}`} onClick={checkRecipe} disabled={!tokens.length}>Check recipe</button>
                 </>}
-                {recipeSolved && dishStage === "ready" && mode === "lab" && <button className="serve-button" onClick={advanceLabPuzzle}>{totalOrders !== null && round >= totalOrders ? "View results →" : "Next puzzle →"}</button>}
                 {recipeSolved && dishStage === "ready" && mode !== "lab" && <><button className="secondary-button" onClick={findAnotherWay}>Find another way</button><button className="serve-button" onClick={bakeDish}>Bake this dish →</button></>}
                 {recipeSolved && dishStage === "plated" && <button className="serve-button deliver-button" onClick={deliverOrder}>Deliver order →</button>}
                 {dishStage === "delivering" && <strong className="delivery-status">Order on its way!</strong>}

@@ -32,7 +32,9 @@ test("P0.2 includes a journey, touch-friendly recipes, lab play, and safe exits"
   assert.match(source, /Exit to menu/);
   assert.match(source, /Finish exploring/);
   assert.match(source, /first-light-particles\.ogg/);
-  assert.match(source, /practiceOperators\.length === 1/);
+  assert.match(source, /order\.operators\.length === 1/);
+  assert.match(source, /music\.volume = 0\.08/);
+  assert.doesNotMatch(source, /dishStage === "ready" && mode === "lab"/);
   assert.match(source, /input-focus/);
   assert.match(source, /Deliver order/);
   assert.match(source, /OVEN BALANCE LAB/);

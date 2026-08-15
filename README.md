@@ -12,7 +12,7 @@ After the title screen, players first choose Journey, Practice, or Balance. Jour
 
 ### Quick Practice
 
-Players select one or several signs from `+`, `−`, `×`, and `÷`. Number ingredients and operation signs can be dragged into the recipe bar on mouse or touch devices, while tapping remains available as a fallback. Every order has an individual bonus clock and no more than five number cards.
+Players select one or several signs from `+`, `−`, `×`, and `÷`. When an activity offers only one sign, it is inserted automatically; with several signs, players drag the one they need. Number ingredients and operation signs can be dragged into the recipe bar on mouse or touch devices, while tapping remains available as a fallback. Every order has an individual bonus clock and no more than five number cards.
 
 ### Oven Balance Lab
 
