@@ -327,7 +327,7 @@ button { font:inherit; }
 .loose-ingredients>div { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:8px; }
 .loose-ingredients button { min-height:76px; border:2px solid #d8d2c5; border-radius:12px; color:var(--ink); background:#fffdf8; padding:7px; cursor:pointer; }
 .loose-ingredients button.selected { border-color:var(--orange); background:#fff0df; box-shadow:0 0 0 4px rgba(225,105,70,.12); transform:translateY(-3px); }
-.loose-ingredients button.placed { border-style:dashed; opacity:.62; }
+.loose-ingredients button.placed { border-style:dashed; opacity:.48; cursor:not-allowed; filter:grayscale(.35); }
 .loose-ingredients button>span,.loose-ingredients button>small { display:block; }
 .loose-ingredients button>span { min-height:26px; font-size:16px; overflow-wrap:anywhere; }
 .loose-ingredients button>small { margin-top:5px; color:#71838a; font-size:7px; font-weight:800; }

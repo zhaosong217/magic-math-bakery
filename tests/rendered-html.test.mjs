@@ -41,6 +41,9 @@ test("P0.2 includes a journey, touch-friendly recipes, lab play, and safe exits"
   assert.match(source, /Every ● dot and every food icon weighs 1/);
   assert.match(source, /Undo last move/);
   assert.match(source, /Clear all/);
+  assert.match(source, /DRAG EACH INGREDIENT ONCE/);
+  assert.match(source, /disabled=\{isPlaced \|\| recipeSolved\}/);
+  assert.match(source, /!isPlaced \? dragProps/);
   assert.match(source, /Next puzzle/);
   assert.match(source, /advanceLabPuzzle/);
   assert.match(source, /CHOOSE HOW TO PLAY/);
