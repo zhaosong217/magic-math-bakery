@@ -2,19 +2,21 @@
 
 Magic Math Bakery is an educational web-game prototype for children aged 7–11. Players build expressions from number cards and operation signs, serve a target number, and earn extra discovery rewards for finding structurally different strategies.
 
-## P0.1 gameplay
+## P0.2 gameplay
+
+The game opens on a **Math Garden** cartoon title screen. A gently pulsing play button leads into the main journey, making the first action obvious before any mode or instructions appear.
 
 ### Bakery Adventure
 
-Guided shifts introduce addition, subtraction, multiplication, division, and mixed operations in stages. Players can choose 6, 10, 12, or endless orders.
+The home screen is now a visual journey map. Completed stops remain colourful, the current stop glows, and future skills stay muted until they are unlocked. First-time players receive a four-step interactive recipe tutorial.
 
 ### Quick Practice
 
-Players select one or several signs from `+`, `−`, `×`, and `÷`. A single selected sign is inserted automatically; with several signs selected, the number and operation areas take turns glowing to guide the next action. Every order has an individual bonus clock.
+Players select one or several signs from `+`, `−`, `×`, and `÷`. Number ingredients and operation signs can be dragged into the recipe bar on mouse or touch devices, while tapping remains available as a fallback. Every order has an individual bonus clock.
 
 ### Oven Balance Lab
 
-This equation-free puzzle turns equality into a physical rule. Players move ingredient clusters between two oven pans, observe the beam tilt, and use every piece to achieve balance in as few moves as possible.
+This equation-free puzzle turns equality into a physical rule. Players drag ingredient clusters directly onto or between two oven pans, observe a damped beam movement, and use every piece to achieve balance in as few moves as possible.
 
 ## Included systems
 
@@ -28,6 +30,8 @@ This equation-free puzzle turns equality into a physical rule. Players move ingr
 - Coins, combo, order progression, and animated feedback
 - End-of-shift thinking report showing strategy use
 - Responsive touch and keyboard-accessible controls
+- Pointer-based drag and drop for tablets, touchscreens, and mouse users
+- Device-local adventure progress and first-use tutorial state
 - Custom social preview card
 
 ## Run locally
@@ -41,7 +45,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Design direction
 
-This P0.1 iteration separates arithmetic fluency from a game-first mathematical system. Future versions can add parity, making-ten, bar models, factors, patterns, enumeration, geometry, and original competition-style reasoning puzzles.
+P0.2 makes the learning path and interaction language visible before asking children to read instructions. Future versions can deepen the map with parity, making-ten, bar models, factors, patterns, enumeration, geometry, and original competition-style reasoning puzzles.
 
 ## Music license
 

@@ -13,23 +13,21 @@ async function render() {
   );
 }
 
-test("server-renders the P0.1 Magic Math Bakery menu", async () => {
+test("server-renders the P0.2 Math Garden opening screen", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
-  assert.match(html, /<title>Magic Math Bakery — One Target, Many Recipes<\/title>/i);
-  assert.match(html, /Bake the number/);
-  assert.match(html, /Bakery Adventure/);
-  assert.match(html, /Quick Practice/);
-  assert.match(html, /Oven Balance Lab/);
-  assert.match(html, /Endless Shift/);
-  assert.match(html, /Music on/);
+  assert.match(html, /<title>Math Garden — Magic Math Bakery<\/title>/i);
+  assert.match(html, /MAGIC MATH ADVENTURE/);
+  assert.match(html, /Math Garden/);
+  assert.match(html, /TAP TO START/);
+  assert.match(html, /Start Math Garden/);
   assert.match(html, /og\.png/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
-test("P0.1 includes guided inputs, delivery, lab play, and safe exits", async () => {
+test("P0.2 includes a journey, touch-friendly recipes, lab play, and safe exits", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /Exit to menu/);
   assert.match(source, /Finish exploring/);
@@ -43,6 +41,14 @@ test("P0.1 includes guided inputs, delivery, lab play, and safe exits", async ()
   assert.match(source, /Clear all/);
   assert.match(source, /Next puzzle/);
   assert.match(source, /advanceLabPuzzle/);
+  assert.match(source, /YOUR BAKERY ADVENTURE/);
+  assert.match(source, /Continue adventure/);
+  assert.match(source, /data-drop-zone="expression"/);
+  assert.match(source, /data-drop-zone="lab-left"/);
+  assert.match(source, /tutorialStep/);
+  assert.match(source, /dragProps/);
+  assert.match(source, /phase === "splash"/);
+  assert.match(source, /splash-start/);
   assert.match(source, /endlessLabDifficulty/);
   assert.match(source, /seenLabPuzzlesRef/);
   assert.match(source, /sessionSeed/);

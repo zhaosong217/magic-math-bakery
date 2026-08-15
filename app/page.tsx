@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 
 type Mode = "adventure" | "practice" | "lab";
 type Operation = "add" | "subtract" | "multiply" | "divide" | "mixed";
 type Operator = "+" | "−" | "×" | "÷";
-type Phase = "menu" | "playing" | "finished";
+type Phase = "splash" | "menu" | "playing" | "finished";
 type SessionLevel = "apprentice" | "baker" | "master" | "endless";
 type DishStage = "building" | "ready" | "plated" | "delivering";
 
@@ -41,6 +42,10 @@ type Order = {
 type LabPiece = { id: string; weight: number; emoji: string; name: string };
 type LabPuzzle = { leftBase: number; rightBase: number; pieces: LabPiece[]; moves: number };
 type LabDifficulty = { minPieces: number; maxPieces: number; maxWeight: number; maxBase: number };
+type DragItem =
+  | { kind: "number"; id: string; label: string }
+  | { kind: "operator"; operator: Operator; label: string }
+  | { kind: "lab"; id: string; label: string };
 
 const sessionLevels: Record<SessionLevel, { title: string; orders: number | null; note: string }> = {
   apprentice: { title: "Apprentice", orders: 6, note: "6 gentle orders" },
@@ -84,6 +89,16 @@ const operatorInfo: Record<Operator, { operation: Exclude<Operation, "mixed">; t
 
 const allOperators = Object.keys(operatorInfo) as Operator[];
 const dishes = ["🧁", "🍰", "🥧", "🍮", "🍩", "🥐"];
+const journeyNodes = [
+  { icon: "🍓", title: "Make 10", skill: "Number pairs", color: "coral" },
+  { icon: "🧁", title: "Many Recipes", skill: "Break apart numbers", color: "gold" },
+  { icon: "🍪", title: "Take Away", skill: "Subtraction", color: "teal" },
+  { icon: "🥐", title: "Equal Groups", skill: "Multiplication", color: "violet" },
+  { icon: "🍰", title: "Share Fairly", skill: "Division", color: "blue" },
+  { icon: "⚖️", title: "Balance Oven", skill: "Equality", color: "mint" },
+  { icon: "✨", title: "Mixed Feast", skill: "Choose a strategy", color: "coral" },
+  { icon: "👑", title: "Grand Bake", skill: "Chapter challenge", color: "gold" },
+];
 
 const labDifficulty: Record<Exclude<SessionLevel, "endless">, LabDifficulty> = {
   apprentice: { minPieces: 3, maxPieces: 4, maxWeight: 3, maxBase: 8 },
@@ -169,6 +184,19 @@ function createStandardOrder(round: number, operation: Operation, operators = al
     customer: customers[(round - 1) % customers.length],
     request: requests[(round - 1) % requests.length],
     challenge,
+  };
+}
+
+function createTutorialOrder(): Order {
+  return {
+    target: 12,
+    cards: makeCards([4, 8, 3, 5, 6, 7, 9], 1),
+    operation: "add",
+    operators: ["+"],
+    timeLimit: 60,
+    customer: "Milo",
+    request: "Will you bake my first number cake?",
+    challenge: "Follow Chef Mira’s glowing hand: 4 + 8 makes 12.",
   };
 }
 
@@ -312,7 +340,7 @@ function recipeSignature(tokens: Token[]) {
 }
 
 export default function Home() {
-  const [phase, setPhase] = useState<Phase>("menu");
+  const [phase, setPhase] = useState<Phase>("splash");
   const [mode, setMode] = useState<Mode>("adventure");
   const [practiceOperators, setPracticeOperators] = useState<Operator[]>(["+"]);
   const [sessionLevel, setSessionLevel] = useState<SessionLevel>("baker");
@@ -339,14 +367,22 @@ export default function Home() {
   const [strategyCounts, setStrategyCounts] = useState<Record<string, number>>({});
   const [soundOn, setSoundOn] = useState(true);
   const [dishStage, setDishStage] = useState<DishStage>("building");
+  const [journeyProgress, setJourneyProgress] = useState(0);
+  const [tutorialStep, setTutorialStep] = useState<number | null>(null);
+  const [dragItem, setDragItem] = useState<DragItem | null>(null);
+  const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
+  const [labMotion, setLabMotion] = useState(0);
   const audioRef = useRef<AudioContext | null>(null);
   const musicRef = useRef<HTMLAudioElement | null>(null);
   const celebrationTimerRef = useRef<number | null>(null);
   const seenLabPuzzlesRef = useRef<Set<string>>(new Set());
   const labSessionSeedRef = useRef(0);
+  const dragItemRef = useRef<DragItem | null>(null);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const dragMovedRef = useRef(false);
+  const suppressClickRef = useRef(false);
 
-  const totalOrders = sessionLevels[sessionLevel].orders;
-  const expression = expressionText(tokens);
+  const totalOrders = mode === "adventure" ? journeyNodes.length : sessionLevels[sessionLevel].orders;
   const currentValue = evaluateExpression(tokens);
   const usedCardIds = tokens
     .filter((token): token is Extract<Token, { kind: "number" }> => token.kind === "number")
@@ -416,6 +452,13 @@ export default function Home() {
     const stored = window.localStorage.getItem("magic-math-sound");
     if (stored !== "off") return;
     const timer = window.setTimeout(() => setSoundOn(false), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const stored = Number(window.localStorage.getItem("magic-math-journey") ?? 0);
+    if (!Number.isFinite(stored)) return;
+    const timer = window.setTimeout(() => setJourneyProgress(Math.min(journeyNodes.length, Math.max(0, stored))), 0);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -492,6 +535,66 @@ export default function Home() {
     setMessageTone("neutral");
   }
 
+  function beginDrag(event: ReactPointerEvent<HTMLElement>, item: DragItem) {
+    if (recipeSolved) return;
+    dragItemRef.current = item;
+    dragMovedRef.current = false;
+    dragStartRef.current = { x: event.clientX, y: event.clientY };
+    setDragItem(item);
+    setDragPosition({ x: event.clientX, y: event.clientY });
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function moveDrag(event: ReactPointerEvent<HTMLElement>) {
+    if (!dragItemRef.current) return;
+    if (Math.hypot(event.clientX - dragStartRef.current.x, event.clientY - dragStartRef.current.y) > 7) {
+      dragMovedRef.current = true;
+    }
+    setDragPosition({ x: event.clientX, y: event.clientY });
+  }
+
+  function endDrag(event: ReactPointerEvent<HTMLElement>) {
+    const item = dragItemRef.current;
+    const moved = dragMovedRef.current;
+    if (item && moved) {
+      const dropTarget = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-drop-zone]");
+      const zone = dropTarget?.dataset.dropZone;
+      if (zone === "expression" && item.kind === "number") {
+        const card = order.cards.find((candidate) => candidate.id === item.id);
+        if (card) addNumber(card);
+      } else if (zone === "expression" && item.kind === "operator") {
+        addOperator(item.operator);
+      } else if ((zone === "lab-left" || zone === "lab-right") && item.kind === "lab") {
+        placeLabPiece(zone === "lab-left" ? "left" : "right", item.id);
+      }
+      suppressClickRef.current = true;
+    }
+    dragItemRef.current = null;
+    dragMovedRef.current = false;
+    setDragItem(null);
+  }
+
+  function cancelDrag() {
+    dragItemRef.current = null;
+    dragMovedRef.current = false;
+    setDragItem(null);
+  }
+
+  function ignoreDragClick() {
+    if (!suppressClickRef.current) return false;
+    suppressClickRef.current = false;
+    return true;
+  }
+
+  function dragProps(item: DragItem) {
+    return {
+      onPointerDown: (event: ReactPointerEvent<HTMLElement>) => beginDrag(event, item),
+      onPointerMove: moveDrag,
+      onPointerUp: endDrag,
+      onPointerCancel: cancelDrag,
+    };
+  }
+
   function startGame() {
     ensureAudio();
     if (soundOn) {
@@ -503,7 +606,8 @@ export default function Home() {
       }
       void musicRef.current.play().catch(() => undefined);
     }
-    setRound(1);
+    const firstRound = mode === "adventure" && journeyProgress < journeyNodes.length ? journeyProgress + 1 : 1;
+    setRound(firstRound);
     setScore(0);
     setCombo(0);
     setBestCombo(0);
@@ -511,12 +615,16 @@ export default function Home() {
     setFastestOrder(null);
     setStrategyCounts({});
     setCelebrating(false);
+    const needsTutorial = mode === "adventure"
+      && journeyProgress === 0
+      && window.localStorage.getItem("magic-math-tutorial") !== "done";
+    setTutorialStep(needsTutorial ? 0 : null);
     if (mode === "lab") {
       seenLabPuzzlesRef.current.clear();
       labSessionSeedRef.current = randomInt(1, 1_000_000);
       resetLab(1);
     }
-    else resetOrder(createOrder(1, mode, practiceOperators));
+    else resetOrder(needsTutorial ? createTutorialOrder() : createOrder(firstRound, mode, practiceOperators));
     setPhase("playing");
   }
 
@@ -529,6 +637,14 @@ export default function Home() {
 
   function addNumber(card: NumberCard) {
     if (recipeSolved) return;
+    if (tutorialStep === 0 && card.value !== 4) {
+      setMessage("Find the glowing strawberry card with number 4.");
+      return;
+    }
+    if (tutorialStep === 2 && card.value !== 8) {
+      setMessage("Great start! Now drag the glowing number 8.");
+      return;
+    }
     const isLastSelected = tokens[tokens.length - 1]?.kind === "number" && tokens[tokens.length - 1].id === card.id;
     if (isLastSelected) {
       undoToken();
@@ -542,20 +658,25 @@ export default function Home() {
       ? `${autoOperator} was added automatically. Choose another number or check your recipe.`
       : "Good choice. The operation signs are glowing — choose one next.");
     setMessageTone("neutral");
+    if (tutorialStep === 0) setTutorialStep(1);
+    else if (tutorialStep === 2) setTutorialStep(3);
     playTone([520], 0.08, 0.035);
   }
 
   function addOperator(operator: Operator) {
     if (nextNeedsNumber || recipeSolved) return;
+    if (tutorialStep === 1 && operator !== "+") return;
     setTokens((current) => [...current, { kind: "operator", value: operator }]);
     setMessage("Now choose another number card.");
     setMessageTone("neutral");
+    if (tutorialStep === 1) setTutorialStep(2);
     playTone([620], 0.08, 0.03);
   }
 
   function undoToken() {
     if (recipeSolved) return;
     setTokens((current) => autoOperator && current.length > 1 ? current.slice(0, -2) : current.slice(0, -1));
+    setTutorialStep((current) => current === null ? null : Math.max(0, current - 1));
     setMessage("Last choice removed. Pick again when you are ready.");
     setMessageTone("neutral");
     playTone([420], 0.07, 0.025);
@@ -564,6 +685,7 @@ export default function Home() {
   function clearExpression() {
     setTokens([]);
     setRecipeSolved(false);
+    setTutorialStep((current) => current === null ? null : 0);
     setMessage("Recipe cleared. Try a fresh idea!");
     setMessageTone("neutral");
   }
@@ -602,9 +724,10 @@ export default function Home() {
     setMessage("Now choose the left or right oven pan.");
   }
 
-  function placeLabPiece(side: "left" | "right") {
-    if (!selectedLabPiece || recipeSolved) return;
-    const nextPlacements = { ...labPlacements, [selectedLabPiece]: side };
+  function placeLabPiece(side: "left" | "right", draggedPieceId?: string) {
+    const pieceId = draggedPieceId ?? selectedLabPiece;
+    if (!pieceId || recipeSolved || labPlacements[pieceId] === side) return;
+    const nextPlacements = { ...labPlacements, [pieceId]: side };
     const nextMoves = labMoves + 1;
     const nextLeft = labPuzzle.leftBase + labPuzzle.pieces
       .filter((piece) => nextPlacements[piece.id] === "left")
@@ -617,6 +740,7 @@ export default function Home() {
     setLabPlacements(nextPlacements);
     setLabMoves(nextMoves);
     setSelectedLabPiece(null);
+    setLabMotion((value) => value + 1);
     playTone([440, 554], 0.12, 0.03);
     if (allPlaced && nextLeft === nextRight) {
       const points = Math.max(50, 180 - Math.max(0, nextMoves - labPuzzle.moves) * 15);
@@ -694,6 +818,11 @@ export default function Home() {
       setMessageTone("try");
       playTone([260, 210], 0.16, 0.04);
       return;
+    }
+
+    if (tutorialStep !== null) {
+      window.localStorage.setItem("magic-math-tutorial", "done");
+      setTutorialStep(null);
     }
 
     const signature = recipeSignature(tokens);
@@ -789,6 +918,11 @@ export default function Home() {
     setOrdersServed((value) => value + 1);
     setCelebrating(true);
     setDishStage("delivering");
+    if (mode === "adventure") {
+      const nextProgress = Math.max(journeyProgress, round);
+      setJourneyProgress(nextProgress);
+      window.localStorage.setItem("magic-math-journey", String(nextProgress));
+    }
     playTone([523, 659, 784], 0.25, 0.06);
     celebrationTimerRef.current = window.setTimeout(() => {
       celebrationTimerRef.current = null;
@@ -820,70 +954,69 @@ export default function Home() {
     <main className="game-shell">
       <div className="cloud cloud-one" />
       <div className="cloud cloud-two" />
-      <header className="brand-bar">
+      {dragItem && <div className={`drag-ghost drag-${dragItem.kind}`} style={{ left: dragPosition.x, top: dragPosition.y }} aria-hidden="true">{dragItem.label}</div>}
+
+      {phase === "splash" && <section className="splash-screen" aria-labelledby="splash-title">
+        <div className="splash-card">
+          <div className="splash-sun" aria-hidden="true">☀</div>
+          <div className="splash-cloud splash-cloud-one" aria-hidden="true">☁</div>
+          <div className="splash-cloud splash-cloud-two" aria-hidden="true">☁</div>
+          <div className="garden-hill hill-back" aria-hidden="true" />
+          <div className="garden-hill hill-front" aria-hidden="true" />
+          <div className="garden-sprinkles sprinkles-one" aria-hidden="true">✿ ✦ ✿</div>
+          <div className="garden-sprinkles sprinkles-two" aria-hidden="true">✦ ✿ ✦ ✿</div>
+          <div className="garden-bakery" aria-hidden="true"><span>🍰</span><strong>1 + 2 = 3</strong></div>
+          <div className="garden-friends" aria-hidden="true"><span>🐰</span><span>👩🏽‍🍳</span><span>🐿️</span></div>
+          <div className="splash-copy"><small>MAGIC MATH ADVENTURE</small><h1 id="splash-title">Math Garden</h1><p>Grow ideas. Bake numbers. Play with maths.</p></div>
+          <button className="splash-start" onClick={() => setPhase("menu")} aria-label="Start Math Garden"><span aria-hidden="true">▶</span></button>
+          <small className="tap-to-start">TAP TO START</small>
+        </div>
+      </section>}
+
+      {phase !== "splash" && <header className="brand-bar">
         <button className="brand-button" onClick={() => phase === "playing" ? exitToMenu() : setPhase("menu")} aria-label="Magic Math Bakery home">
           <span className="brand-mark" aria-hidden="true">✦</span>
-          <span><small>NUMBER QUEST</small><strong>Magic Math Bakery</strong></span>
+          <span><small>MAGIC MATH BAKERY</small><strong>Math Garden</strong></span>
         </button>
         <button className={`sound-pill ${soundOn ? "active" : ""}`} onClick={toggleSound} aria-pressed={soundOn}>
           {soundOn ? "♪ Music on" : "♩ Sound off"}
         </button>
-      </header>
+      </header>}
 
       {phase === "menu" && (
-        <section className="menu-card" aria-labelledby="menu-title">
-          <div className="menu-copy">
-            <p className="section-kicker">CHOOSE TODAY’S MISSION</p>
-            <h1 id="menu-title">Bake the number.<br />Discover the recipe.</h1>
-            <p className="intro-description">Build expressions with number cards and operation signs. One correct recipe serves the order; a different strategy earns discovery stars.</p>
-
-            <div className="mode-grid" role="radiogroup" aria-label="Game mode">
-              <button className={`mode-card ${mode === "adventure" ? "selected" : ""}`} onClick={() => setMode("adventure")} role="radio" aria-checked={mode === "adventure"}>
-                <span className="mode-icon">🗺️</span><span><strong>Bakery Adventure</strong><small>Unlock +, −, × and ÷ through a guided shift</small></span><i>GUIDED</i>
-              </button>
-              <button className={`mode-card ${mode === "practice" ? "selected" : ""}`} onClick={() => setMode("practice")} role="radio" aria-checked={mode === "practice"}>
-                <span className="mode-icon">⏱️</span><span><strong>Quick Practice</strong><small>Choose one or several operations for a focused shift</small></span><i>FLUENCY</i>
-              </button>
-              <button className={`mode-card ${mode === "lab" ? "selected" : ""}`} onClick={() => setMode("lab")} role="radio" aria-checked={mode === "lab"}>
-                <span className="mode-icon">⚖️</span><span><strong>Oven Balance Lab</strong><small>A pure puzzle: balance ingredients without equations</small></span><i>PLAY</i>
-              </button>
-            </div>
-
-            {mode === "practice" && (
-              <div className="operation-picker">
-                <span>CHOOSE ONE OR MORE OPERATIONS</span>
-                <div>
-                  {allOperators.map((operator) => (
-                    <button key={operator} className={practiceOperators.includes(operator) ? "selected" : ""} onClick={() => togglePracticeOperator(operator)} aria-pressed={practiceOperators.includes(operator)}>
-                      <strong>{operator}</strong><small>{operatorInfo[operator].title}</small>
-                    </button>
-                  ))}
-                </div>
-                <p>{practiceOperators.length === 1 ? `${practiceOperators[0]} will be inserted automatically during play.` : "You will choose between the selected signs during play."}</p>
-              </div>
-            )}
-
-            <div className="session-picker">
-              <span>CHOOSE SHIFT LENGTH</span>
-              <div>
-                {(Object.keys(sessionLevels) as SessionLevel[]).map((level) => (
-                  <button key={level} className={sessionLevel === level ? "selected" : ""} onClick={() => setSessionLevel(level)} aria-pressed={sessionLevel === level}>
-                    <strong>{sessionLevels[level].title}</strong><small>{sessionLevels[level].note}</small>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <button className="primary-button" onClick={startGame}>Start {mode === "lab" ? "exploring" : "the shift"} <span>→</span></button>
-            <p className="tiny-note">P0.1 · per-order rewards · one answer is enough · ages 7–11</p>
+        <section className="journey-home" aria-labelledby="menu-title">
+          <div className="journey-intro">
+            <div><p className="section-kicker">YOUR BAKERY ADVENTURE</p><h1 id="menu-title">Learn maths by<br />baking magic.</h1><p>Drag number ingredients into recipes, serve every customer, and light up the path to the Grand Bake.</p></div>
+            <div className="how-it-works" aria-label="How to play"><span><i>1</i><b>See the goal</b><small>Read the customer’s target.</small></span><span><i>2</i><b>Drag a recipe</b><small>Move numbers and signs into place.</small></span><span><i>3</i><b>Bake & unlock</b><small>Earn stars and open the next stop.</small></span></div>
           </div>
-          <div className="menu-visual" aria-hidden="true">
-            <div className="visual-badge">NEW RECIPE BOOK</div>
-            <div className="target-cookie"><small>TARGET</small><strong>12</strong></div>
-            <div className="recipe-slip slip-one"><span>PAIR</span><strong>4 + 8</strong><i>★</i></div>
-            <div className="recipe-slip slip-two"><span>MULTIPLY</span><strong>3 × 4</strong><i>★</i></div>
-            <div className="recipe-slip slip-three"><span>DIVIDE</span><strong>24 ÷ 2</strong><i>★</i></div>
-            <div className="menu-chef">👩🏽‍🍳</div>
+
+          <div className="journey-layout">
+            <div className="journey-map">
+              <div className="map-heading"><div><span>CHAPTER 1</span><h2>The Number Bakery</h2></div><strong>{journeyProgress} / {journeyNodes.length} ★</strong></div>
+              <div className="map-path" aria-label="Bakery Adventure level path">
+                {journeyNodes.map((node, index) => {
+                  const completed = index < journeyProgress;
+                  const current = index === journeyProgress || (journeyProgress === journeyNodes.length && index === journeyNodes.length - 1);
+                  return <button key={node.title} className={`path-stop ${node.color} ${completed ? "completed" : ""} ${current ? "current" : ""}`} onClick={() => setMode("adventure")} disabled={!completed && !current} aria-label={`${node.title}, ${completed ? "completed" : current ? "current level" : "locked"}`}><span>{completed ? "✓" : node.icon}</span><div><strong>{node.title}</strong><small>{node.skill}</small></div>{current && <i>PLAY</i>}{!completed && !current && <i>🔒</i>}</button>;
+                })}
+              </div>
+            </div>
+
+            <aside className="mission-dock">
+              <div className="chef-welcome"><span aria-hidden="true">👩🏽‍🍳</span><div><small>CHEF MIRA SAYS</small><strong>{mode === "adventure" ? journeyProgress === journeyNodes.length ? "The whole bakery is glowing!" : `Next up: ${journeyNodes[journeyProgress].title}` : mode === "practice" ? "Pick your signs and sharpen your skills." : "Can you make the oven perfectly level?"}</strong></div></div>
+              <div className="play-mode-tabs" role="radiogroup" aria-label="Choose play mode">
+                <button className={mode === "adventure" ? "selected" : ""} onClick={() => setMode("adventure")} role="radio" aria-checked={mode === "adventure"}><span>🗺️</span><strong>Journey</strong><small>Follow the path</small></button>
+                <button className={mode === "practice" ? "selected" : ""} onClick={() => setMode("practice")} role="radio" aria-checked={mode === "practice"}><span>⚡</span><strong>Practice</strong><small>Choose your signs</small></button>
+                <button className={mode === "lab" ? "selected" : ""} onClick={() => setMode("lab")} role="radio" aria-checked={mode === "lab"}><span>⚖️</span><strong>Balance</strong><small>Play with weight</small></button>
+              </div>
+
+              {mode === "practice" && <div className="operation-picker compact"><span>YOUR SIGNS</span><div>{allOperators.map((operator) => <button key={operator} className={practiceOperators.includes(operator) ? "selected" : ""} onClick={() => togglePracticeOperator(operator)} aria-pressed={practiceOperators.includes(operator)}><strong>{operator}</strong><small>{operatorInfo[operator].title}</small></button>)}</div><p>{practiceOperators.length === 1 ? `${practiceOperators[0]} is placed automatically.` : "Drag a sign when the recipe asks for one."}</p></div>}
+
+              {mode !== "adventure" && <div className="session-picker compact"><span>HOW LONG?</span><div>{(Object.keys(sessionLevels) as SessionLevel[]).map((level) => <button key={level} className={sessionLevel === level ? "selected" : ""} onClick={() => setSessionLevel(level)} aria-pressed={sessionLevel === level}><strong>{sessionLevels[level].title}</strong><small>{sessionLevels[level].orders === null ? "∞" : sessionLevels[level].orders}</small></button>)}</div></div>}
+
+              <button className="primary-button mission-start" onClick={startGame}><span>{mode === "lab" ? "⚖️" : mode === "practice" ? "⚡" : "▶"}</span>{mode === "adventure" ? journeyProgress === journeyNodes.length ? "Replay the journey" : "Continue adventure" : mode === "lab" ? "Open Balance Lab" : "Start quick practice"}</button>
+              <div className="mini-legend"><span><i className="done" />Complete</span><span><i className="now" />Current</span><span><i className="later" />Coming next</span></div>
+            </aside>
           </div>
         </section>
       )}
@@ -910,32 +1043,33 @@ export default function Home() {
           </div>
 
           <div className="workbench">
+            {tutorialStep !== null && mode === "adventure" && <div className="tutorial-ribbon" role="status"><span className="tutorial-chef">👩🏽‍🍳</span><div><small>YOUR FIRST RECIPE · STEP {tutorialStep + 1} OF 4</small><strong>{tutorialStep === 0 ? "Drag number 4 into the recipe bar" : tutorialStep === 1 ? "Drag the + sign into the recipe" : tutorialStep === 2 ? "Now drag number 8" : "Perfect — check your recipe!"}</strong><p>{tutorialStep < 3 ? "You can also tap the glowing tile." : "4 + 8 makes the customer’s target: 12."}</p></div><div className="tutorial-dots">{[0, 1, 2, 3].map((step) => <i key={step} className={step <= tutorialStep ? "active" : ""} />)}</div></div>}
             {mode === "lab" ? (
               <div className="lab-layout">
                 <div className="balance-game">
                   <div className="lab-heading"><span>OVEN BALANCE LAB</span><h2>Use every loose ingredient and level the beam</h2><small>Suggested moves: {labPuzzle.moves} · Your moves: {labMoves}</small></div>
                   <div className="lab-howto" aria-label="How to play Oven Balance Lab">
                     <div><strong>1</strong><span><b>Read the weight</b><small>Every ● dot and every food icon weighs 1.</small></span></div>
-                    <div><strong>2</strong><span><b>Use every ingredient</b><small>Tap a food group, then choose either pan.</small></span></div>
+                    <div><strong>2</strong><span><b>Drag every ingredient</b><small>Move each food group directly onto either pan.</small></span></div>
                     <div><strong>3</strong><span><b>Make both sides equal</b><small>The beam must be level after all food is placed.</small></span></div>
                   </div>
-                  <div className={`balance-scale ${labLeftWeight > labRightWeight ? "tilt-left" : labRightWeight > labLeftWeight ? "tilt-right" : "level"}`}>
-                    <button className="scale-pan left-pan" onClick={() => placeLabPiece("left")} disabled={!selectedLabPiece || recipeSolved} aria-label="Place selected ingredient on the left pan">
+                  <div className={`balance-scale ${labLeftWeight > labRightWeight ? "tilt-left" : labRightWeight > labLeftWeight ? "tilt-right" : "level"} ${labMotion ? `settling-${labMotion % 2}` : ""}`}>
+                    <div className={`scale-pan left-pan ${dragItem?.kind === "lab" ? "drop-ready" : ""}`} data-drop-zone="lab-left" onClick={() => placeLabPiece("left")} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") placeLabPiece("left"); }} role="button" tabIndex={selectedLabPiece && !recipeSolved ? 0 : -1} aria-disabled={!selectedLabPiece || recipeSolved} aria-label="Drop an ingredient on the left pan">
                       <small>FIXED DOTS · {labPuzzle.leftBase}</small>
                       <span className="base-stack" aria-label="Fixed ingredients">{"●".repeat(labPuzzle.leftBase)}</span>
-                      <span className="placed-stack">{labPuzzle.pieces.filter((piece) => labPlacements[piece.id] === "left").map((piece) => <i key={piece.id}>{piece.emoji.repeat(piece.weight)}</i>)}</span>
+                      <span className="placed-stack">{labPuzzle.pieces.filter((piece) => labPlacements[piece.id] === "left").map((piece) => <button key={piece.id} className="placed-piece draggable" {...dragProps({ kind: "lab", id: piece.id, label: piece.emoji.repeat(piece.weight) })} onClick={(event) => { event.stopPropagation(); if (!ignoreDragClick()) chooseLabPiece(piece.id); }} aria-label={`Move ${piece.name} group`}>{piece.emoji.repeat(piece.weight)}</button>)}</span>
                       <strong>LEFT PAN</strong>
-                    </button>
+                    </div>
                     <div className="scale-post"><i /><strong>{labLeftWeight === labRightWeight ? Object.keys(labPlacements).length === labPuzzle.pieces.length ? "LEVEL" : "LEVEL FOR NOW" : "TILTING"}</strong></div>
-                    <button className="scale-pan right-pan" onClick={() => placeLabPiece("right")} disabled={!selectedLabPiece || recipeSolved} aria-label="Place selected ingredient on the right pan">
+                    <div className={`scale-pan right-pan ${dragItem?.kind === "lab" ? "drop-ready" : ""}`} data-drop-zone="lab-right" onClick={() => placeLabPiece("right")} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") placeLabPiece("right"); }} role="button" tabIndex={selectedLabPiece && !recipeSolved ? 0 : -1} aria-disabled={!selectedLabPiece || recipeSolved} aria-label="Drop an ingredient on the right pan">
                       <small>FIXED DOTS · {labPuzzle.rightBase}</small>
                       <span className="base-stack" aria-label="Fixed ingredients">{"●".repeat(labPuzzle.rightBase)}</span>
-                      <span className="placed-stack">{labPuzzle.pieces.filter((piece) => labPlacements[piece.id] === "right").map((piece) => <i key={piece.id}>{piece.emoji.repeat(piece.weight)}</i>)}</span>
+                      <span className="placed-stack">{labPuzzle.pieces.filter((piece) => labPlacements[piece.id] === "right").map((piece) => <button key={piece.id} className="placed-piece draggable" {...dragProps({ kind: "lab", id: piece.id, label: piece.emoji.repeat(piece.weight) })} onClick={(event) => { event.stopPropagation(); if (!ignoreDragClick()) chooseLabPiece(piece.id); }} aria-label={`Move ${piece.name} group`}>{piece.emoji.repeat(piece.weight)}</button>)}</span>
                       <strong>RIGHT PAN</strong>
-                    </button>
+                    </div>
                   </div>
                   <div className="lab-actions"><button onClick={undoLabMove} disabled={!labHistory.length || recipeSolved}><span>↶</span> Undo last move</button><button onClick={clearLab} disabled={!Object.keys(labPlacements).length || recipeSolved}><span>✕</span> Clear all</button></div>
-                  <div className="loose-ingredients"><span>LOOSE INGREDIENTS</span><div>{labPuzzle.pieces.map((piece) => <button key={piece.id} className={`${selectedLabPiece === piece.id ? "selected" : ""} ${labPlacements[piece.id] ? "placed" : ""}`} onClick={() => chooseLabPiece(piece.id)} disabled={recipeSolved} aria-pressed={selectedLabPiece === piece.id}><span>{piece.emoji.repeat(piece.weight)}</span><small>{labPlacements[piece.id] ? `On ${labPlacements[piece.id]} pan · tap to move` : "Tap, then choose a pan"}</small></button>)}</div></div>
+                  <div className="loose-ingredients"><span>DRAG THESE INGREDIENTS</span><div>{labPuzzle.pieces.map((piece) => <button key={piece.id} className={`draggable ${selectedLabPiece === piece.id ? "selected" : ""} ${labPlacements[piece.id] ? "placed" : ""}`} {...dragProps({ kind: "lab", id: piece.id, label: piece.emoji.repeat(piece.weight) })} onClick={() => { if (!ignoreDragClick()) chooseLabPiece(piece.id); }} disabled={recipeSolved} aria-pressed={selectedLabPiece === piece.id}><span>{piece.emoji.repeat(piece.weight)}</span><small>{labPlacements[piece.id] ? `On ${labPlacements[piece.id]} pan · drag to move` : "Drag to a pan · or tap"}</small></button>)}</div></div>
                   {recipeSolved && <div className="lab-success"><span>✓</span><div><strong>Perfect balance!</strong><small>Every ingredient is used and both pans have equal weight.</small></div><button className="serve-button" onClick={advanceLabPuzzle}>{totalOrders !== null && round >= totalOrders ? "View results →" : "Next puzzle →"}</button></div>}
                 </div>
                 <aside className="lab-rules"><span>GOAL OF THE PUZZLE</span><h3>Place all food. Level the oven.</h3><p>The dots are fixed weights and cannot move. The food groups are movable weights. You may add food to either side—not only the lighter side.</p><div><i>●</i><strong>One symbol = one weight</strong><small>A group of three berries weighs the same as three dots.</small></div><div><i>↔️</i><strong>Either pan is allowed</strong><small>Sometimes both sides need extra food to use every group.</small></div><div><i>✨</i><strong>Finish condition</strong><small>All loose food is placed and the beam is level.</small></div></aside>
@@ -943,8 +1077,8 @@ export default function Home() {
             ) : (
             <div className="builder-layout">
               <div className="builder-main">
-                <div className="expression-board">
-                  <div><span>YOUR EXPRESSION</span><strong>{expression || "Choose a number to begin"}</strong></div>
+                <div className={`expression-board ${dragItem && dragItem.kind !== "lab" ? "drop-ready" : ""}`} data-drop-zone="expression">
+                  <div><span>YOUR RECIPE · DROP HERE</span><div className="expression-slots">{tokens.length ? tokens.map((token, index) => <b key={token.kind === "number" ? token.id : `${token.value}-${index}`} className={token.kind}>{token.value}</b>) : <em>Drag a number here to begin</em>}</div></div>
                   <div className={`value-orb ${currentValue === order.target ? "exact" : ""}`}><span>VALUE</span><strong>{currentValue === null ? "?" : Number(currentValue.toFixed(2))}</strong></div>
                 </div>
                 <div className="builder-actions"><button onClick={undoToken} disabled={!tokens.length || recipeSolved}><span>↶</span> Undo last</button><button onClick={clearExpression} disabled={!tokens.length || recipeSolved}><span>✕</span> Clear all</button><small>Tap the last selected card to undo it</small></div>
@@ -955,12 +1089,13 @@ export default function Home() {
                   {order.cards.map((card) => {
                     const used = usedCardIds.includes(card.id);
                     const isLast = tokens[tokens.length - 1]?.kind === "number" && tokens[tokens.length - 1].id === card.id;
-                    return <button key={card.id} className={`number-card ${used ? "used" : ""} ${isLast ? "last-selected" : ""}`} onClick={() => addNumber(card)} disabled={(used && !isLast) || (!numberInputActive && !isLast) || recipeSolved} aria-label={`${card.name}, value ${card.value}${isLast ? ", last selected, tap to undo" : used ? ", used" : ""}`}><span aria-hidden="true">{card.emoji}</span><strong>{card.value}</strong><small>{isLast ? "tap to undo" : card.name}</small></button>;
+                    const tutorialTarget = (tutorialStep === 0 && card.value === 4) || (tutorialStep === 2 && card.value === 8);
+                    return <button key={card.id} className={`number-card draggable ${used ? "used" : ""} ${isLast ? "last-selected" : ""} ${tutorialTarget ? "tutorial-target" : ""}`} {...dragProps({ kind: "number", id: card.id, label: `${card.emoji} ${card.value}` })} onClick={() => { if (!ignoreDragClick()) addNumber(card); }} disabled={(used && !isLast) || (!numberInputActive && !isLast) || recipeSolved} aria-label={`${card.name}, value ${card.value}${isLast ? ", last selected, tap to undo" : used ? ", used" : ""}`}><span aria-hidden="true">{card.emoji}</span><strong>{card.value}</strong><small>{tutorialTarget ? "drag me" : isLast ? "tap to undo" : card.name}</small></button>;
                   })}
                 </div>
                 </div>
 
-                <div className={`operator-row ${operatorInputActive && !recipeSolved ? "input-focus" : ""} ${autoOperator ? "auto-operator" : ""}`}><div><span>2 · OPERATION SIGNS</span><h2>{autoOperator ? `${autoOperator} is added automatically` : operatorInputActive ? "Choose an operation" : "Choose a number first"}</h2></div><div>{operators.map((operator) => <button key={operator} onClick={() => addOperator(operator)} disabled={!operatorInputActive || recipeSolved} aria-label={`Add ${operator} to expression`}>{operator}</button>)}</div></div>
+                <div className={`operator-row ${operatorInputActive && !recipeSolved ? "input-focus" : ""} ${autoOperator ? "auto-operator" : ""}`}><div><span>2 · OPERATION SIGNS</span><h2>{autoOperator ? `${autoOperator} is added automatically` : operatorInputActive ? "Drag a sign into your recipe" : "Choose a number first"}</h2></div><div>{operators.map((operator) => <button key={operator} className={`draggable ${tutorialStep === 1 && operator === "+" ? "tutorial-target" : ""}`} {...dragProps({ kind: "operator", operator, label: operator })} onClick={() => { if (!ignoreDragClick()) addOperator(operator); }} disabled={!operatorInputActive || recipeSolved} aria-label={`Add ${operator} to expression`}>{operator}</button>)}</div></div>
               </div>
 
               <aside className="recipe-book" aria-label="Discovered recipes">
@@ -979,7 +1114,7 @@ export default function Home() {
               <div className="coach-buttons">
                 {mode !== "lab" && !recipeSolved && <>
                   {foundRecipes.length > 0 && <button className="secondary-button" onClick={finishExploring}>Finish exploring →</button>}
-                  <button className="serve-button" onClick={checkRecipe} disabled={!tokens.length}>Check recipe</button>
+                  <button className={`serve-button ${tutorialStep === 3 ? "tutorial-target" : ""}`} onClick={checkRecipe} disabled={!tokens.length}>Check recipe</button>
                 </>}
                 {recipeSolved && dishStage === "ready" && mode === "lab" && <button className="serve-button" onClick={advanceLabPuzzle}>{totalOrders !== null && round >= totalOrders ? "View results →" : "Next puzzle →"}</button>}
                 {recipeSolved && dishStage === "ready" && mode !== "lab" && <><button className="secondary-button" onClick={findAnotherWay}>Find another way</button><button className="serve-button" onClick={bakeDish}>Bake this dish →</button></>}
@@ -1002,7 +1137,7 @@ export default function Home() {
         </section>
       )}
 
-      <footer><span>Educational game prototype · P0.1</span><span>Music: First Light Particles by Yoiyami · CC0</span></footer>
+      {phase !== "splash" && <footer><span>Educational game prototype · P0.2</span><span>Music: First Light Particles by Yoiyami · CC0</span></footer>}
     </main>
   );
 }
