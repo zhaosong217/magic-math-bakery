@@ -81,7 +81,8 @@ const operatorInfo: Record<Operator, { operation: Exclude<Operation, "mixed">; t
 };
 
 const allOperators = Object.keys(operatorInfo) as Operator[];
-const musicVolumes = [0, 0.012, 0.024, 0.038, 0.055] as const;
+// Audio volume is perceived logarithmically, so each step needs a clearly larger ratio.
+const musicVolumes = [0, 0.008, 0.03, 0.09, 0.2] as const;
 const practiceStoryLevels: Record<Operator, number[]> = {
   "+": [1, 2, 3, 5],
   "−": [1, 2, 4, 6],

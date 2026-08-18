@@ -33,7 +33,7 @@ test("P0.4 includes shared Story and Practice interaction, settings, lab play, a
   assert.match(source, /Exit to menu/);
   assert.match(source, /first-light-particles\.ogg/);
   assert.match(source, /order\.operators\.length === 1/);
-  assert.match(source, /musicVolumes = \[0, 0\.012, 0\.024, 0\.038, 0\.055\]/);
+  assert.match(source, /musicVolumes = \[0, 0\.008, 0\.03, 0\.09, 0\.2\]/);
   assert.match(source, /magic-math-volume/);
   assert.match(source, /Reset progress/);
   assert.match(source, /resetStoryProgress/);
