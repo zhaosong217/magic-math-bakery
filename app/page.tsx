@@ -81,8 +81,10 @@ const operatorInfo: Record<Operator, { operation: Exclude<Operation, "mixed">; t
 };
 
 const allOperators = Object.keys(operatorInfo) as Operator[];
-// Audio volume is perceived logarithmically, so each step needs a clearly larger ratio.
-const musicVolumes = [0, 0.008, 0.03, 0.09, 0.2] as const;
+function musicVolumeFromPercent(percent: number) {
+  const normalized = Math.max(0, Math.min(100, percent)) / 100;
+  return normalized * normalized * 0.3;
+}
 const practiceStoryLevels: Record<Operator, number[]> = {
   "+": [1, 2, 3, 5],
   "−": [1, 2, 4, 6],
@@ -441,7 +443,7 @@ export default function Home() {
   const [messageTone, setMessageTone] = useState<"neutral" | "good" | "try">("neutral");
   const [celebrating, setCelebrating] = useState(false);
   const [strategyCounts, setStrategyCounts] = useState<Record<string, number>>({});
-  const [volumeLevel, setVolumeLevel] = useState(2);
+  const [volumePercent, setVolumePercent] = useState(25);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [dishStage, setDishStage] = useState<DishStage>("building");
@@ -463,7 +465,7 @@ export default function Home() {
   const dragMovedRef = useRef(false);
   const suppressClickRef = useRef(false);
 
-  const soundOn = volumeLevel > 0;
+  const soundOn = volumePercent > 0;
   const totalOrders = mode === "adventure" ? journeyNodes[storyLevel - 1].orders : sessionLevels[sessionLevel].orders;
   const currentValue = evaluateExpression(tokens);
   const storyExpressionIsLegal = currentValue !== null
@@ -507,13 +509,13 @@ export default function Home() {
       oscillator.type = index % 2 ? "triangle" : "sine";
       oscillator.frequency.value = frequency;
       gain.gain.setValueAtTime(0.0001, context.currentTime + index * 0.07);
-      gain.gain.exponentialRampToValueAtTime(volume * (0.45 + volumeLevel * 0.11), context.currentTime + index * 0.07 + 0.015);
+      gain.gain.exponentialRampToValueAtTime(volume * (0.25 + volumePercent * 0.0075), context.currentTime + index * 0.07 + 0.015);
       gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + index * 0.07 + duration);
       oscillator.connect(gain).connect(context.destination);
       oscillator.start(context.currentTime + index * 0.07);
       oscillator.stop(context.currentTime + index * 0.07 + duration + 0.02);
     });
-  }, [ensureAudio, soundOn, volumeLevel]);
+  }, [ensureAudio, soundOn, volumePercent]);
 
   const stopMusic = useCallback(() => {
     musicRef.current?.pause();
@@ -524,12 +526,12 @@ export default function Home() {
     if (!musicRef.current) {
       const music = new Audio("/audio/first-light-particles.ogg");
       music.loop = true;
-      music.volume = musicVolumes[volumeLevel];
+      music.volume = musicVolumeFromPercent(volumePercent);
       musicRef.current = music;
     }
-    musicRef.current.volume = musicVolumes[volumeLevel];
+    musicRef.current.volume = musicVolumeFromPercent(volumePercent);
     void musicRef.current.play().catch(() => undefined);
-  }, [soundOn, volumeLevel]);
+  }, [soundOn, volumePercent]);
 
   const startMusic = useCallback(() => {
     if (phase !== "playing") return;
@@ -537,18 +539,20 @@ export default function Home() {
   }, [phase, playMusic]);
 
   useEffect(() => {
-    const storedVolume = Number(window.localStorage.getItem("magic-math-volume"));
+    const storedPercent = Number(window.localStorage.getItem("magic-math-volume-percent"));
+    const legacyVolume = Number(window.localStorage.getItem("magic-math-volume"));
     const legacySound = window.localStorage.getItem("magic-math-sound");
-    const nextLevel = Number.isInteger(storedVolume) && storedVolume >= 0 && storedVolume <= 4
-      ? storedVolume
-      : legacySound === "off" ? 0 : 2;
-    const timer = window.setTimeout(() => setVolumeLevel(nextLevel), 0);
+    const legacyPercent = [0, 10, 25, 55, 100][legacyVolume];
+    const nextPercent = Number.isFinite(storedPercent) && storedPercent >= 0 && storedPercent <= 100
+      ? storedPercent
+      : legacySound === "off" ? 0 : legacyPercent ?? 25;
+    const timer = window.setTimeout(() => setVolumePercent(nextPercent), 0);
     return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
-    if (musicRef.current) musicRef.current.volume = musicVolumes[volumeLevel];
-  }, [volumeLevel]);
+    if (musicRef.current) musicRef.current.volume = musicVolumeFromPercent(volumePercent);
+  }, [volumePercent]);
 
   useEffect(() => {
     const stored = Number(window.localStorage.getItem("magic-math-journey") ?? 0);
@@ -588,21 +592,21 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, [celebrating, dishStage, mode, phase, playTone, recipeSolved]);
 
-  function changeVolume(level: number) {
-    const nextLevel = Math.max(0, Math.min(4, level));
-    setVolumeLevel(nextLevel);
-    window.localStorage.setItem("magic-math-volume", String(nextLevel));
-    window.localStorage.setItem("magic-math-sound", nextLevel > 0 ? "on" : "off");
-    if (nextLevel === 0) stopMusic();
+  function changeVolume(percent: number) {
+    const nextPercent = Math.round(Math.max(0, Math.min(100, percent)));
+    setVolumePercent(nextPercent);
+    window.localStorage.setItem("magic-math-volume-percent", String(nextPercent));
+    window.localStorage.setItem("magic-math-sound", nextPercent > 0 ? "on" : "off");
+    if (nextPercent === 0) stopMusic();
     else {
       ensureAudio();
       if (!musicRef.current) {
         const music = new Audio("/audio/first-light-particles.ogg");
         music.loop = true;
-        music.volume = musicVolumes[nextLevel];
+        music.volume = musicVolumeFromPercent(nextPercent);
         musicRef.current = music;
       }
-      musicRef.current.volume = musicVolumes[nextLevel];
+      musicRef.current.volume = musicVolumeFromPercent(nextPercent);
       if (phase === "playing") void musicRef.current.play().catch(() => undefined);
     }
   }
@@ -714,10 +718,10 @@ export default function Home() {
       if (!musicRef.current) {
         const music = new Audio("/audio/first-light-particles.ogg");
         music.loop = true;
-        music.volume = musicVolumes[volumeLevel];
+        music.volume = musicVolumeFromPercent(volumePercent);
         musicRef.current = music;
       }
-      musicRef.current.volume = musicVolumes[volumeLevel];
+      musicRef.current.volume = musicVolumeFromPercent(volumePercent);
       void musicRef.current.play().catch(() => undefined);
     }
     const selectedStoryLevel = forcedStoryLevel ?? (journeyProgress < journeyNodes.length ? journeyProgress + 1 : 1);
@@ -1140,7 +1144,7 @@ export default function Home() {
         <section className="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
           <button className="settings-close" onClick={() => setSettingsOpen(false)} aria-label="Close settings">×</button>
           <p className="section-kicker">YOUR BAKERY</p><h2 id="settings-title">Settings</h2>
-          <div className="volume-setting"><div><strong>Music volume</strong><small>{volumeLevel === 0 ? "Muted" : `Level ${volumeLevel} of 4`}</small></div><div className="volume-steps" aria-label="Choose one of five music volume levels">{musicVolumes.map((_, level) => <button key={level} className={volumeLevel === level ? "selected" : ""} onClick={() => changeVolume(level)} aria-label={level === 0 ? "Mute music" : `Music volume level ${level}`} aria-pressed={volumeLevel === level}><span>{level === 0 ? "×" : "▮".repeat(level)}</span></button>)}</div></div>
+          <div className="volume-setting"><div><strong>Music volume</strong><small>{volumePercent === 0 ? "Muted" : `${volumePercent} / 100`}</small></div><div className="volume-slider"><div><span>0</span><strong>{volumePercent}</strong><span>100</span></div><input type="range" min="0" max="100" step="1" value={volumePercent} onChange={(event) => changeVolume(Number(event.target.value))} aria-label="Music volume from 0 to 100" /></div></div>
           <div className="reset-setting"><div><strong>Story progress</strong><small>Start the ten-level Story again from the beginning.</small></div><button className={resetConfirm ? "confirming" : ""} onClick={resetStoryProgress}>{resetConfirm ? "Tap again to reset" : "Reset progress"}</button></div>
         </section>
       </div>}
