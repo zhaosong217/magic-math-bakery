@@ -2,7 +2,7 @@
 
 Magic Math Bakery is an educational web-game prototype for children aged 7–11. Players build expressions from number cards and operation signs, serve a target number, and earn extra discovery rewards for finding structurally different strategies.
 
-## P0.3 gameplay
+## P0.4 gameplay
 
 The game opens on a **Magic Math Bakery** cartoon title screen. A gently pulsing play button leads into three icon-led modes, making the first action obvious before any instructions appear.
 
@@ -49,7 +49,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Design direction
 
-P0.3 makes the learning path and interaction language visible before asking children to read instructions. Future versions can deepen the map with parity, bar models, factors, patterns, enumeration, geometry, and original competition-style reasoning puzzles.
+P0.4 adds five-step audio control, resettable Story progress, gentler advanced levels, and one shared child-friendly recipe interaction for Story and Practice. Future versions can deepen the map with parity, bar models, factors, patterns, enumeration, geometry, and original competition-style reasoning puzzles.
 
 ## Music license
 

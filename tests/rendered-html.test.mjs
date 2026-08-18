@@ -13,7 +13,7 @@ async function render() {
   );
 }
 
-test("server-renders the P0.3 Magic Math Bakery opening screen", async () => {
+test("server-renders the P0.4 Magic Math Bakery opening screen", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
@@ -28,16 +28,21 @@ test("server-renders the P0.3 Magic Math Bakery opening screen", async () => {
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
-test("P0.3 includes Story progression, touch-friendly recipes, lab play, and safe exits", async () => {
+test("P0.4 includes shared Story and Practice interaction, settings, lab play, and safe exits", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /Exit to menu/);
-  assert.match(source, /Finish exploring/);
   assert.match(source, /first-light-particles\.ogg/);
   assert.match(source, /order\.operators\.length === 1/);
-  assert.match(source, /music\.volume = 0\.08/);
+  assert.match(source, /musicVolumes = \[0, 0\.012, 0\.024, 0\.038, 0\.055\]/);
+  assert.match(source, /magic-math-volume/);
+  assert.match(source, /Reset progress/);
+  assert.match(source, /resetStoryProgress/);
+  assert.match(source, /HOW MANY QUIZ\?/);
+  assert.match(source, /createPracticeDeck/);
+  assert.match(source, /unlockedPracticeOperators/);
+  assert.match(source, /mode !== "lab" && storyExpressionIsLegal/);
   assert.doesNotMatch(source, /dishStage === "ready" && mode === "lab"/);
   assert.match(source, /input-focus/);
-  assert.match(source, /Deliver order/);
   assert.match(source, /OVEN BALANCE LAB/);
   assert.match(source, /Every ● dot and every food icon weighs 1/);
   assert.match(source, /Undo last move/);
@@ -58,7 +63,7 @@ test("P0.3 includes Story progression, touch-friendly recipes, lab play, and saf
   assert.match(source, /departing/);
   assert.match(source, /bakedRecipeCounts/);
   assert.match(source, /bakedRecipes/);
-  assert.match(source, /Submit level/);
+  assert.match(source, /Submit ✓/);
   assert.match(source, /Story Map/);
   assert.match(source, /Play Again/);
   assert.match(source, /startGame\(storyLevel\)/);
@@ -69,7 +74,7 @@ test("P0.3 includes Story progression, touch-friendly recipes, lab play, and saf
   assert.match(source, /goToNextStoryOrder/);
   assert.match(source, /storyExpressionIsLegal/);
   assert.match(source, /length >= 2/);
-  assert.match(source, /foundRecipes\.length > 0 && round/);
+  assert.match(source, /foundRecipes\.length > 0 && \(totalOrders === null/);
   assert.match(source, /check-orb/);
   assert.match(source, /story-expression-actions/);
   assert.match(source, /Go to next/);
