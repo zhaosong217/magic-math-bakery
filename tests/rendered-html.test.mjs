@@ -13,21 +13,22 @@ async function render() {
   );
 }
 
-test("server-renders the P0.2 Math Garden opening screen", async () => {
+test("server-renders the P0.3 Magic Math Bakery opening screen", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
-  assert.match(html, /<title>Math Garden — Magic Math Bakery<\/title>/i);
-  assert.match(html, /MAGIC MATH ADVENTURE/);
-  assert.match(html, /Math Garden/);
+  assert.match(html, /<title>Magic Math Bakery<\/title>/i);
+  assert.match(html, /BAKE · THINK · PLAY/);
+  assert.match(html, /Magic Math/);
+  assert.match(html, /Bakery/);
   assert.match(html, /TAP TO START/);
-  assert.match(html, /Start Math Garden/);
+  assert.match(html, /Start Magic Math Bakery/);
   assert.match(html, /og\.png/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
-test("P0.2 includes a journey, touch-friendly recipes, lab play, and safe exits", async () => {
+test("P0.3 includes Story progression, touch-friendly recipes, lab play, and safe exits", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /Exit to menu/);
   assert.match(source, /Finish exploring/);
@@ -47,7 +48,34 @@ test("P0.2 includes a journey, touch-friendly recipes, lab play, and safe exits"
   assert.match(source, /Next puzzle/);
   assert.match(source, /advanceLabPuzzle/);
   assert.match(source, /CHOOSE HOW TO PLAY/);
-  assert.match(source, /Play the glowing level/);
+  assert.match(source, /Magic Math Story level path/);
+  assert.match(source, /Times Tables/);
+  assert.match(source, /Power Divide/);
+  assert.match(source, /createStoryDeck/);
+  assert.match(source, /story-order-track/);
+  assert.match(source, /storyDeck\.slice\(round - 1\)/);
+  assert.match(source, /storyCardDeparting/);
+  assert.match(source, /departing/);
+  assert.match(source, /bakedRecipeCounts/);
+  assert.match(source, /bakedRecipes/);
+  assert.match(source, /Submit level/);
+  assert.match(source, /Story Map/);
+  assert.match(source, /Play Again/);
+  assert.match(source, /startGame\(storyLevel\)/);
+  assert.match(source, /Next Level/);
+  assert.match(source, /startGame\(storyLevel \+ 1\)/);
+  assert.match(source, /Find another way/);
+  assert.match(source, /advanceStoryOrder/);
+  assert.match(source, /goToNextStoryOrder/);
+  assert.match(source, /storyExpressionIsLegal/);
+  assert.match(source, /length >= 2/);
+  assert.match(source, /foundRecipes\.length > 0 && round/);
+  assert.match(source, /check-orb/);
+  assert.match(source, /story-expression-actions/);
+  assert.match(source, /Go to next/);
+  assert.match(source, /onClick=\{\(\) => checkRecipe\(\)\}/);
+  assert.doesNotMatch(source, /checkRecipe\(nextTokens\)/);
+  assert.doesNotMatch(source, /Play the glowing level|Made for beginners|BONUS TIME|OVERTIME/);
   assert.match(source, /data-drop-zone="expression"/);
   assert.match(source, /data-drop-zone="lab-left"/);
   assert.match(source, /tutorialStep/);
@@ -56,7 +84,6 @@ test("P0.2 includes a journey, touch-friendly recipes, lab play, and safe exits"
   assert.match(source, /phase === "modes"/);
   assert.match(source, /phase === "journey"/);
   assert.match(source, /splash-start/);
-  assert.match(source, /STARTER GARDEN · \+ AND − ONLY/);
   assert.match(source, /startGame\(index \+ 1\)/);
   assert.match(source, /while \(values\.length < 5\)/);
   assert.match(source, /maxPieces: 3, maxWeight: 2, maxBase: 5/);

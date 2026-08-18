@@ -9,18 +9,18 @@ export async function generateMetadata(): Promise<Metadata> {
   const imageUrl = `${protocol}://${host}/og.png`;
 
   return {
-    title: "Math Garden — Magic Math Bakery",
-    description: "Follow a colourful maths journey, drag number recipes into place, and explore equality in this P0.2 bakery adventure.",
+    title: "Magic Math Bakery",
+    description: "Follow a colourful maths story, drag number recipes into place, and grow from tiny sums to place-value challenges.",
     openGraph: {
-      title: "Math Garden",
-      description: "One target. Many recipes.",
+      title: "Magic Math Bakery",
+      description: "Bake, think, and play through number adventures.",
       type: "website",
       images: [{ url: imageUrl, width: 1536, height: 1024, alt: "Magic Math Bakery with three ways to make 12" }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Math Garden",
-      description: "One target. Many recipes.",
+      title: "Magic Math Bakery",
+      description: "Bake, think, and play through number adventures.",
       images: [imageUrl],
     },
   };

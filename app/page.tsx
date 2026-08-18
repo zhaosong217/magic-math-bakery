@@ -9,6 +9,7 @@ type Operator = "+" | "−" | "×" | "÷";
 type Phase = "splash" | "modes" | "journey" | "playing" | "finished";
 type SessionLevel = "apprentice" | "baker" | "master" | "endless";
 type DishStage = "building" | "ready" | "plated" | "delivering";
+type AnswerFeedback = "idle" | "correct" | "wrong";
 
 type NumberCard = {
   id: string;
@@ -90,12 +91,16 @@ const operatorInfo: Record<Operator, { operation: Exclude<Operation, "mixed">; t
 const allOperators = Object.keys(operatorInfo) as Operator[];
 const dishes = ["🧁", "🍰", "🥧", "🍮", "🍩", "🥐"];
 const journeyNodes = [
-  { icon: "🍓", title: "Make 5", skill: "Small number pairs", color: "coral" },
-  { icon: "🧁", title: "Make 10", skill: "Friendly addition", color: "gold" },
-  { icon: "🍪", title: "Number Pairs", skill: "Break apart numbers", color: "teal" },
-  { icon: "🍒", title: "Add a Step", skill: "Addition within 20", color: "violet" },
-  { icon: "🍰", title: "Take Away", skill: "Gentle subtraction", color: "blue" },
-  { icon: "👑", title: "Plus & Minus Bake", skill: "Chapter challenge", color: "gold" },
+  { icon: "🍓", title: "Tiny Numbers", skill: "+ − within 5", color: "coral", orders: 6 },
+  { icon: "🧁", title: "Make Ten", skill: "+ − within 10", color: "gold", orders: 6 },
+  { icon: "🌈", title: "Cross Ten", skill: "carrying addition within 20", color: "teal", orders: 6 },
+  { icon: "🎒", title: "Borrow One", skill: "borrowing subtraction within 20", color: "violet", orders: 6 },
+  { icon: "🍰", title: "Quick Add", skill: "mental addition within 100", color: "blue", orders: 8 },
+  { icon: "🥧", title: "Quick Take Away", skill: "mental subtraction within 100", color: "coral", orders: 8 },
+  { icon: "✖️", title: "Times Tables", skill: "multiplication facts", color: "gold", orders: 10 },
+  { icon: "➗", title: "Fact Families", skill: "division from times tables", color: "teal", orders: 10 },
+  { icon: "🚀", title: "Power Multiply", skill: "tens & hundreds × numbers", color: "violet", orders: 10 },
+  { icon: "🏆", title: "Power Divide", skill: "tens & hundreds ÷ numbers", color: "blue", orders: 10 },
 ];
 
 const labDifficulty: Record<Exclude<SessionLevel, "endless">, LabDifficulty> = {
@@ -123,10 +128,6 @@ function makeCards(values: number[], round: number) {
     value,
     ...ingredientStyles[index % ingredientStyles.length],
   }));
-}
-
-function adventureOperation(round: number): Operation {
-  return round <= 4 ? "add" : "subtract";
 }
 
 function createStandardOrder(round: number, operation: Operation, operators = allowedOperators(operation)): Order {
@@ -180,6 +181,113 @@ function createStandardOrder(round: number, operation: Operation, operators = al
     request: requests[(round - 1) % requests.length],
     challenge,
   };
+}
+
+function createStoryOrder(level: number, question: number): Order {
+  let operation: Operation = "add";
+  let operators: Operator[] = ["+"];
+  let solution: number[] = [2, 3];
+  let target = 5;
+  let challenge = "Use the cards to make the target.";
+
+  if (level === 1 || level === 2) {
+    const limit = level === 1 ? 5 : 10;
+    const useAddition = (question + level) % 2 === 0;
+    operators = ["+", "−"];
+    if (useAddition) {
+      operation = "add";
+      target = randomInt(2, limit);
+      const first = randomInt(1, target - 1);
+      solution = [first, target - first];
+    } else {
+      operation = "subtract";
+      const first = randomInt(2, limit);
+      const second = randomInt(1, first - 1);
+      target = first - second;
+      solution = [first, second];
+    }
+    challenge = `Choose + or − and stay within ${limit}.`;
+  } else if (level === 3) {
+    const first = randomInt(6, 9);
+    const second = randomInt(11 - first, Math.min(9, 20 - first));
+    target = first + second;
+    solution = [first, second];
+    challenge = "Bridge through 10 to add.";
+  } else if (level === 4) {
+    operation = "subtract";
+    operators = ["−"];
+    const first = randomInt(11, 18);
+    const ones = first % 10;
+    const second = randomInt(Math.max(ones + 1, 2), 9);
+    target = first - second;
+    solution = [first, second];
+    challenge = "Regroup one ten before subtracting.";
+  } else if (level === 5) {
+    const addend = question % 2 ? randomInt(2, 9) : randomInt(1, 4) * 10;
+    const twoDigit = randomInt(12, 99 - addend);
+    target = twoDigit + addend;
+    solution = [twoDigit, addend];
+    challenge = "Add a one-digit number or a whole ten mentally.";
+  } else if (level === 6) {
+    operation = "subtract";
+    operators = ["−"];
+    const subtrahend = question % 2 ? randomInt(2, 9) : randomInt(1, 4) * 10;
+    const first = randomInt(Math.max(21, subtrahend + 11), 99);
+    target = first - subtrahend;
+    solution = [first, subtrahend];
+    challenge = "Subtract a one-digit number or a whole ten mentally.";
+  } else if (level === 7) {
+    operation = "multiply";
+    operators = ["×"];
+    const first = randomInt(2, 9);
+    const second = randomInt(2, 9);
+    target = first * second;
+    solution = [first, second];
+    challenge = "Use a multiplication fact you know.";
+  } else if (level === 8) {
+    operation = "divide";
+    operators = ["÷"];
+    const divisor = randomInt(2, 9);
+    target = randomInt(2, 9);
+    solution = [divisor * target, divisor];
+    challenge = "Use the related times-table fact.";
+  } else if (level === 9) {
+    operation = "multiply";
+    operators = ["×"];
+    const placeValue = question % 2 ? randomInt(1, 9) * 10 : randomInt(1, 9) * 100;
+    const factors = [randomInt(2, 9), randomInt(11, 25), randomInt(101, 125)];
+    const factor = factors[question % factors.length];
+    target = placeValue * factor;
+    solution = [placeValue, factor];
+    challenge = "Use place value to multiply by tens or hundreds.";
+  } else if (level === 10) {
+    operation = "divide";
+    operators = ["÷"];
+    const placeValue = question % 2 ? randomInt(1, 9) * 10 : randomInt(1, 9) * 100;
+    const quotients = [randomInt(2, 9), randomInt(11, 25), randomInt(101, 125)];
+    target = quotients[question % quotients.length];
+    solution = [placeValue * target, placeValue];
+    challenge = "Undo place-value multiplication with exact division.";
+  }
+
+  const values = [...solution];
+  const distractorMax = Math.max(10, ...solution);
+  while (values.length < 5) values.push(randomInt(1, distractorMax));
+  return {
+    target,
+    cards: makeCards(values, level * 100 + question),
+    operation,
+    operators,
+    timeLimit: 60,
+    customer: customers[(level + question - 2) % customers.length],
+    request: requests[(level + question - 2) % requests.length],
+    challenge,
+  };
+}
+
+function createStoryDeck(level: number) {
+  const orderCount = journeyNodes[level - 1]?.orders ?? 6;
+  return Array.from({ length: orderCount }, (_, index) => createStoryOrder(level, index + 1));
 }
 
 function createTutorialOrder(): Order {
@@ -276,8 +384,7 @@ function createLabPuzzle(round: number, level: SessionLevel, seen = new Set<stri
 
 function createOrder(round: number, mode: Exclude<Mode, "lab">, practiceOperators: Operator[]) {
   if (mode === "adventure") {
-    const operation = adventureOperation(round);
-    return createStandardOrder(round, operation);
+    return createStoryOrder(1, round);
   }
   const chosen = practiceOperators[(round - 1) % practiceOperators.length] ?? "+";
   return createStandardOrder(round, operatorInfo[chosen].operation, practiceOperators);
@@ -350,8 +457,12 @@ export default function Home() {
   const [mode, setMode] = useState<Mode>("adventure");
   const [practiceOperators, setPracticeOperators] = useState<Operator[]>(["+"]);
   const [sessionLevel, setSessionLevel] = useState<SessionLevel>("apprentice");
+  const [storyLevel, setStoryLevel] = useState(1);
+  const [storyDeck, setStoryDeck] = useState<Order[]>(() => createStoryDeck(1));
+  const [completedDishes, setCompletedDishes] = useState<string[]>([]);
+  const [bakedRecipes, setBakedRecipes] = useState<string[]>([]);
   const [round, setRound] = useState(1);
-  const [order, setOrder] = useState<Order>(() => createOrder(1, "adventure", ["+"]));
+  const [order, setOrder] = useState<Order>(() => createStoryOrder(1, 1));
   const [labPuzzle, setLabPuzzle] = useState<LabPuzzle>(() => createLabPuzzle(1, "baker"));
   const [labPlacements, setLabPlacements] = useState<Record<string, "left" | "right">>({});
   const [labHistory, setLabHistory] = useState<Array<Record<string, "left" | "right">>>([]);
@@ -373,6 +484,8 @@ export default function Home() {
   const [strategyCounts, setStrategyCounts] = useState<Record<string, number>>({});
   const [soundOn, setSoundOn] = useState(true);
   const [dishStage, setDishStage] = useState<DishStage>("building");
+  const [answerFeedback, setAnswerFeedback] = useState<AnswerFeedback>("idle");
+  const [storyCardDeparting, setStoryCardDeparting] = useState(false);
   const [journeyProgress, setJourneyProgress] = useState(0);
   const [tutorialStep, setTutorialStep] = useState<number | null>(null);
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
@@ -381,6 +494,7 @@ export default function Home() {
   const audioRef = useRef<AudioContext | null>(null);
   const musicRef = useRef<HTMLAudioElement | null>(null);
   const celebrationTimerRef = useRef<number | null>(null);
+  const storyCardTimerRef = useRef<number | null>(null);
   const seenLabPuzzlesRef = useRef<Set<string>>(new Set());
   const labSessionSeedRef = useRef(0);
   const dragItemRef = useRef<DragItem | null>(null);
@@ -388,8 +502,12 @@ export default function Home() {
   const dragMovedRef = useRef(false);
   const suppressClickRef = useRef(false);
 
-  const totalOrders = mode === "adventure" ? journeyNodes.length : sessionLevels[sessionLevel].orders;
+  const totalOrders = mode === "adventure" ? journeyNodes[storyLevel - 1].orders : sessionLevels[sessionLevel].orders;
   const currentValue = evaluateExpression(tokens);
+  const storyExpressionIsLegal = currentValue !== null
+    && tokens.filter((token) => token.kind === "number").length >= 2
+    && tokens.filter((token) => token.kind === "operator").length >= 1;
+  const storyCanCheck = mode === "adventure" && storyExpressionIsLegal && !recipeSolved;
   const usedCardIds = tokens
     .filter((token): token is Extract<Token, { kind: "number" }> => token.kind === "number")
     .map((token) => token.id);
@@ -477,6 +595,7 @@ export default function Home() {
     return () => {
       stopMusic();
       if (celebrationTimerRef.current !== null) window.clearTimeout(celebrationTimerRef.current);
+      if (storyCardTimerRef.current !== null) window.clearTimeout(storyCardTimerRef.current);
       musicRef.current = null;
       const audioContext = audioRef.current;
       audioRef.current = null;
@@ -522,6 +641,8 @@ export default function Home() {
     setMistakes(0);
     setOrderTimeLeft(nextOrder.timeLimit);
     setRecipeSolved(false);
+    setAnswerFeedback("idle");
+    setStoryCardDeparting(false);
     setDishStage("building");
     setMessage("Build an expression, then check your recipe.");
     setMessageTone("neutral");
@@ -601,7 +722,7 @@ export default function Home() {
     };
   }
 
-  function startGame(forcedRound?: number) {
+  function startGame(forcedStoryLevel?: number) {
     ensureAudio();
     if (soundOn) {
       if (!musicRef.current) {
@@ -612,26 +733,35 @@ export default function Home() {
       }
       void musicRef.current.play().catch(() => undefined);
     }
-    const firstRound = forcedRound ?? (mode === "adventure" && journeyProgress < journeyNodes.length ? journeyProgress + 1 : 1);
-    setRound(firstRound);
+    const selectedStoryLevel = forcedStoryLevel ?? (journeyProgress < journeyNodes.length ? journeyProgress + 1 : 1);
+    setRound(1);
     setScore(0);
     setCombo(0);
     setBestCombo(0);
     setOrdersServed(0);
     setFastestOrder(null);
     setStrategyCounts({});
+    setCompletedDishes([]);
+    setBakedRecipes([]);
+    setAnswerFeedback("idle");
     setCelebrating(false);
     const needsTutorial = mode === "adventure"
       && journeyProgress === 0
-      && firstRound === 1
+      && selectedStoryLevel === 1
       && window.localStorage.getItem("magic-math-tutorial") !== "done";
     setTutorialStep(needsTutorial ? 0 : null);
-    if (mode === "lab") {
+    if (mode === "adventure") {
+      const deck = createStoryDeck(selectedStoryLevel);
+      if (needsTutorial) deck[0] = createTutorialOrder();
+      setStoryLevel(selectedStoryLevel);
+      setStoryDeck(deck);
+      resetOrder(deck[0]);
+    } else if (mode === "lab") {
       seenLabPuzzlesRef.current.clear();
       labSessionSeedRef.current = randomInt(1, 1_000_000);
       resetLab(1);
     }
-    else resetOrder(needsTutorial ? createTutorialOrder() : createOrder(firstRound, mode, practiceOperators));
+    else resetOrder(createOrder(1, mode, practiceOperators));
     setPhase("playing");
   }
 
@@ -658,9 +788,11 @@ export default function Home() {
       return;
     }
     if (!numberInputActive || usedCardIds.includes(card.id)) return;
-    setTokens((current) => autoOperator && current.length
-      ? [...current, { kind: "operator", value: autoOperator }, { kind: "number", id: card.id, value: card.value }]
-      : [...current, { kind: "number", id: card.id, value: card.value }]);
+    const nextTokens: Token[] = autoOperator && tokens.length
+      ? [...tokens, { kind: "operator", value: autoOperator }, { kind: "number", id: card.id, value: card.value }]
+      : [...tokens, { kind: "number", id: card.id, value: card.value }];
+    setTokens(nextTokens);
+    setAnswerFeedback("idle");
     setMessage(autoOperator
       ? `${autoOperator} was added automatically. Choose another number or check your recipe.`
       : "Good choice. The operation signs are glowing — choose one next.");
@@ -674,6 +806,7 @@ export default function Home() {
     if (nextNeedsNumber || recipeSolved) return;
     if (tutorialStep === 1 && operator !== "+") return;
     setTokens((current) => [...current, { kind: "operator", value: operator }]);
+    setAnswerFeedback("idle");
     setMessage("Now choose another number card.");
     setMessageTone("neutral");
     if (tutorialStep === 1) setTutorialStep(2);
@@ -683,6 +816,7 @@ export default function Home() {
   function undoToken() {
     if (recipeSolved) return;
     setTokens((current) => autoOperator && current.length > 1 ? current.slice(0, -2) : current.slice(0, -1));
+    setAnswerFeedback("idle");
     setTutorialStep((current) => current === null ? null : current === 3 ? 2 : 0);
     setMessage("Last choice removed. Pick again when you are ready.");
     setMessageTone("neutral");
@@ -691,6 +825,7 @@ export default function Home() {
 
   function clearExpression() {
     setTokens([]);
+    setAnswerFeedback("idle");
     setRecipeSolved(false);
     setTutorialStep((current) => current === null ? null : 0);
     setMessage("Recipe cleared. Try a fresh idea!");
@@ -807,8 +942,8 @@ export default function Home() {
     }, 650);
   }
 
-  function checkRecipe() {
-    const value = evaluateExpression(tokens);
+  function checkRecipe(recipeTokens = tokens) {
+    const value = evaluateExpression(recipeTokens);
     if (value === null) {
       setMessage("Finish the expression with a number before checking it.");
       setMessageTone("try");
@@ -823,6 +958,7 @@ export default function Home() {
         ? `Your recipe makes ${value}. You still need ${Number((order.target - value).toFixed(2))}.`
         : `Your recipe makes ${value}. That is ${Number((value - order.target).toFixed(2))} too much.`);
       setMessageTone("try");
+      setAnswerFeedback("wrong");
       playTone([260, 210], 0.16, 0.04);
       return;
     }
@@ -832,15 +968,41 @@ export default function Home() {
       setTutorialStep(null);
     }
 
-    const signature = recipeSignature(tokens);
+    const signature = recipeSignature(recipeTokens);
     if (foundRecipes.some((recipe) => recipe.signature === signature)) {
       setMessage("That recipe is already in your book. Change the structure, not just the order.");
       setMessageTone("try");
+      setAnswerFeedback("wrong");
       playTone([330, 300], 0.13, 0.035);
       return;
     }
 
-    const category = classifyRecipe(tokens);
+    if (mode === "adventure") {
+      const isFirst = foundRecipes.length === 0;
+      const points = Math.max(30, (isFirst ? 100 : 60) - mistakes * 10);
+      const dish = dishes[(round - 1) % dishes.length];
+      const category = classifyRecipe(recipeTokens);
+      const recipe: Recipe = { expression: expressionText(recipeTokens), signature, category, points };
+      setFoundRecipes((current) => [...current, recipe]);
+      setScore((valueScore) => valueScore + points);
+      setStrategyCounts((current) => ({ ...current, [category]: (current[category] ?? 0) + 1 }));
+      setBakedRecipes((current) => [...current, dish]);
+      if (isFirst) {
+        setCompletedDishes((current) => [...current, dish]);
+        setOrdersServed((current) => current + 1);
+      }
+      setRecipeSolved(true);
+      setDishStage("ready");
+      setAnswerFeedback("correct");
+      setMessage(isFirst
+        ? `Perfect! +${points} coins. ${dish} is in your Recipe Book. Try another way or continue.`
+        : `Another clever recipe! +${points} coins. ${dish} now shows ×${foundRecipes.length + 1}.`);
+      setMessageTone("good");
+      playTone(isFirst ? [392, 523, 659] : [523, 659, 784, 1047], 0.24, 0.055);
+      return;
+    }
+
+    const category = classifyRecipe(recipeTokens);
     const isFirst = foundRecipes.length === 0;
     const categoryIsNew = !foundRecipes.some((recipe) => recipe.category === category);
     const base = orderTimeLeft >= 0 ? 100 : orderTimeLeft >= -10 ? 60 : 30;
@@ -851,7 +1013,7 @@ export default function Home() {
       20,
       (isFirst ? base + timeBonus : discoveryBonus + newStrategyBonus) - mistakes * 10,
     );
-    const recipe: Recipe = { expression: expressionText(tokens), signature, category, points };
+    const recipe: Recipe = { expression: expressionText(recipeTokens), signature, category, points };
     setFoundRecipes((current) => [...current, recipe]);
     setScore((valueScore) => valueScore + points);
     setStrategyCounts((current) => ({ ...current, [category]: (current[category] ?? 0) + 1 }));
@@ -874,6 +1036,7 @@ export default function Home() {
     setTokens([]);
     setRecipeSolved(false);
     setDishStage("building");
+    setAnswerFeedback("idle");
     setMessage("Same target, fresh structure. Which strategy has not been used yet?");
     setMessageTone("neutral");
     playTone([659, 784], 0.14, 0.04);
@@ -890,11 +1053,48 @@ export default function Home() {
 
   function exitToMenu() {
     if (celebrationTimerRef.current !== null) window.clearTimeout(celebrationTimerRef.current);
+    if (storyCardTimerRef.current !== null) window.clearTimeout(storyCardTimerRef.current);
     celebrationTimerRef.current = null;
+    storyCardTimerRef.current = null;
     setCelebrating(false);
     setTokens([]);
     stopMusic();
     setPhase("modes");
+  }
+
+  function advanceStoryOrder() {
+    if (mode !== "adventure" || !foundRecipes.length || round >= (totalOrders ?? 1)) return;
+    const nextRound = round + 1;
+    setRound(nextRound);
+    resetOrder(storyDeck[nextRound - 1]);
+    playTone([659, 784], 0.14, 0.04);
+  }
+
+  function goToNextStoryOrder() {
+    if (mode !== "adventure" || !foundRecipes.length || storyCardDeparting) return;
+    if (round < (totalOrders ?? 1)) {
+      setStoryCardDeparting(true);
+      storyCardTimerRef.current = window.setTimeout(() => {
+        storyCardTimerRef.current = null;
+        advanceStoryOrder();
+      }, 520);
+      return;
+    }
+    setTokens([]);
+    setRecipeSolved(true);
+    setAnswerFeedback("correct");
+    setMessage("All orders are complete. Use the orange Submit button to finish the level.");
+    setMessageTone("good");
+  }
+
+  function submitStoryLevel() {
+    if (mode !== "adventure" || completedDishes.length !== totalOrders) return;
+    const nextProgress = Math.max(journeyProgress, storyLevel);
+    setJourneyProgress(nextProgress);
+    window.localStorage.setItem("magic-math-journey", String(nextProgress));
+    setBestCombo((value) => Math.max(value, completedDishes.length));
+    setPhase("finished");
+    playTone([523, 659, 784, 1047], 0.32, 0.055);
   }
 
   function finishOrExit() {
@@ -946,13 +1146,21 @@ export default function Home() {
     }, 1300);
   }
 
-  const progress = totalOrders === null ? ((round - 1) % 5 + 1) * 20 : (round / totalOrders) * 100;
+  const progress = totalOrders === null
+    ? ((round - 1) % 5 + 1) * 20
+    : mode === "adventure"
+      ? (completedDishes.length / totalOrders) * 100
+      : (round / totalOrders) * 100;
+  const bakedRecipeCounts = useMemo(() => bakedRecipes.reduce<Record<string, number>>((counts, dish) => {
+    counts[dish] = (counts[dish] ?? 0) + 1;
+    return counts;
+  }, {}), [bakedRecipes]);
   const topStrategies = useMemo(
     () => Object.entries(strategyCounts).sort((a, b) => b[1] - a[1]),
     [strategyCounts],
   );
   const titleForMode = mode === "adventure"
-    ? "Bakery Adventure"
+    ? `Story · ${journeyNodes[storyLevel - 1].title}`
     : mode === "practice"
       ? `${practiceOperators.join(" ")} Practice`
       : "Oven Balance Lab";
@@ -974,16 +1182,16 @@ export default function Home() {
           <div className="garden-sprinkles sprinkles-two" aria-hidden="true">✦ ✿ ✦ ✿</div>
           <div className="garden-bakery" aria-hidden="true"><span>🍰</span><strong>1 + 2 = 3</strong></div>
           <div className="garden-friends" aria-hidden="true"><span>🐰</span><span>👩🏽‍🍳</span><span>🐿️</span></div>
-          <div className="splash-copy"><small>MAGIC MATH ADVENTURE</small><h1 id="splash-title">Math Garden</h1><p>Grow ideas. Bake numbers. Play with maths.</p></div>
-          <button className="splash-start" onClick={() => setPhase("modes")} aria-label="Start Math Garden"><span aria-hidden="true">▶</span></button>
+          <div className="splash-copy"><small>BAKE · THINK · PLAY</small><h1 id="splash-title">Magic Math<br />Bakery</h1><p>Turn number ideas into delicious discoveries.</p></div>
+          <button className="splash-start" onClick={() => setPhase("modes")} aria-label="Start Magic Math Bakery"><span aria-hidden="true">▶</span></button>
           <small className="tap-to-start">TAP TO START</small>
         </div>
       </section>}
 
       {phase !== "splash" && <header className="brand-bar">
-        <button className="brand-button" onClick={() => phase === "playing" ? exitToMenu() : setPhase("modes")} aria-label="Math Garden mode selection">
+        <button className="brand-button" onClick={() => phase === "playing" ? exitToMenu() : setPhase("modes")} aria-label="Magic Math Bakery mode selection">
           <span className="brand-mark" aria-hidden="true">✦</span>
-          <span><small>MAGIC MATH BAKERY</small><strong>Math Garden</strong></span>
+          <span><small>NUMBER ADVENTURES</small><strong>Magic Math Bakery</strong></span>
         </button>
         <button className={`sound-pill ${soundOn ? "active" : ""}`} onClick={toggleSound} aria-pressed={soundOn}>
           {soundOn ? "♪ Music on" : "♩ Sound off"}
@@ -993,56 +1201,51 @@ export default function Home() {
       {phase === "modes" && <section className="mode-select-home" aria-labelledby="mode-title">
         <div className="mode-select-intro"><p className="section-kicker">CHOOSE HOW TO PLAY</p><h1 id="mode-title">Where shall we grow today?</h1><p>Pick one big activity. You can always return here and choose another.</p></div>
         <div className="big-mode-grid">
-          <button className="big-mode-card journey-choice" onClick={() => { setMode("adventure"); setPhase("journey"); }}><span>🗺️</span><div><small>STEP-BY-STEP</small><strong>Journey</strong><p>A gentle path using only addition and subtraction.</p></div><i>VIEW MAP →</i></button>
-          <button className={`big-mode-card practice-choice ${mode === "practice" ? "selected" : ""}`} onClick={() => setMode("practice")}><span>⚡</span><div><small>CHOOSE A SKILL</small><strong>Practice</strong><p>Pick one or more signs and build number recipes.</p></div><i>{mode === "practice" ? "SELECTED ✓" : "CHOOSE →"}</i></button>
-          <button className={`big-mode-card balance-choice ${mode === "lab" ? "selected" : ""}`} onClick={() => setMode("lab")}><span>⚖️</span><div><small>PUZZLE PLAY</small><strong>Balance</strong><p>Move small food groups until both oven pans match.</p></div><i>{mode === "lab" ? "SELECTED ✓" : "CHOOSE →"}</i></button>
+          <button className="big-mode-card journey-choice" onClick={() => { setMode("adventure"); setPhase("journey"); }}><span>📖</span><div><small>FOLLOW THE PATH</small><strong>Story</strong><p>Grow from tiny sums to place-value challenges.</p></div><i>Go!</i></button>
+          <button className={`big-mode-card practice-choice ${mode === "practice" ? "selected" : ""}`} onClick={() => setMode("practice")}><span>🧠</span><div><small>TRAIN YOUR BRAIN</small><strong>Practice</strong><p>Pick one or more signs and build number recipes.</p></div><i>Go!</i></button>
+          <button className={`big-mode-card balance-choice ${mode === "lab" ? "selected" : ""}`} onClick={() => setMode("lab")}><span>⚖️</span><div><small>PUZZLE PLAY</small><strong>Balance</strong><p>Move small food groups until both oven pans match.</p></div><i>Go!</i></button>
         </div>
         {(mode === "practice" || mode === "lab") && <div className="mode-setup-panel">
           <div className="chef-welcome"><span aria-hidden="true">👩🏽‍🍳</span><div><small>CHEF MIRA SAYS</small><strong>{mode === "practice" ? "Choose the signs you already know." : "We will begin with tiny weights and only a few foods."}</strong></div></div>
           {mode === "practice" && <div className="operation-picker compact"><span>YOUR SIGNS</span><div>{allOperators.map((operator) => <button key={operator} className={practiceOperators.includes(operator) ? "selected" : ""} onClick={() => togglePracticeOperator(operator)} aria-pressed={practiceOperators.includes(operator)}><strong>{operator}</strong><small>{operatorInfo[operator].title}</small></button>)}</div><p>{practiceOperators.length === 1 ? `${practiceOperators[0]} is placed automatically.` : "Drag a sign when the recipe asks for one."}</p></div>}
           <div className="session-picker compact"><span>HOW LONG?</span><div>{(Object.keys(sessionLevels) as SessionLevel[]).map((level) => <button key={level} className={sessionLevel === level ? "selected" : ""} onClick={() => setSessionLevel(level)} aria-pressed={sessionLevel === level}><strong>{sessionLevels[level].title}</strong><small>{sessionLevels[level].orders === null ? "∞" : sessionLevels[level].orders}</small></button>)}</div></div>
-          <button className="primary-button mission-start" onClick={() => startGame()}><span>{mode === "lab" ? "⚖️" : "⚡"}</span>{mode === "lab" ? "Start Balance" : "Start Practice"}</button>
+          <button className="primary-button mission-start" onClick={() => startGame()}><span>{mode === "lab" ? "⚖️" : "🧠"}</span>Go!</button>
         </div>}
       </section>}
 
       {phase === "journey" && <section className="journey-home" aria-labelledby="menu-title">
         <button className="journey-back" onClick={() => setPhase("modes")}>← Choose another mode</button>
-        <div className="journey-intro starter-intro">
-          <div><p className="section-kicker">STARTER GARDEN · + AND − ONLY</p><h1 id="menu-title">One small step<br />at a time.</h1><p>This first path stays with friendly addition and subtraction. Multiplication and division remain in Practice until your child is ready.</p></div>
-          <div className="how-it-works" aria-label="How Journey works"><span><i>1</i><b>Tap your stop</b><small>The glowing level starts immediately.</small></span><span><i>2</i><b>Solve 5 cards</b><small>No crowded ingredient shelf.</small></span><span><i>3</i><b>Open the path</b><small>One completed stop unlocks the next.</small></span></div>
-        </div>
+        <div className="journey-intro starter-intro"><div><p className="section-kicker">MAGIC MATH STORY</p><h1 id="menu-title">Bake your way<br />through number land.</h1><p>Tap the glowing stop to begin. Each completed bakery chapter opens the next part of the path.</p></div><span className="story-hero" aria-hidden="true">🗺️</span></div>
         <div className="journey-layout">
           <div className="journey-map">
-            <div className="map-heading"><div><span>CHAPTER 1 · BEGINNER</span><h2>Plus & Minus Garden</h2></div><strong>{journeyProgress} / {journeyNodes.length} ★</strong></div>
-            <div className="map-path" aria-label="Addition and subtraction level path">{journeyNodes.map((node, index) => { const completed = index < journeyProgress; const current = index === journeyProgress || (journeyProgress === journeyNodes.length && index === journeyNodes.length - 1); return <button key={node.title} className={`path-stop ${node.color} ${completed ? "completed" : ""} ${current ? "current" : ""}`} onClick={() => startGame(index + 1)} disabled={!completed && !current} aria-label={`${node.title}, ${completed ? "completed, replay level" : current ? "current level, play now" : "locked"}`}><span>{completed ? "✓" : node.icon}</span><div><strong>{node.title}</strong><small>{node.skill}</small></div>{(completed || current) && <i>{completed ? "REPLAY" : "PLAY"}</i>}{!completed && !current && <i>🔒</i>}</button>; })}</div>
+            <div className="map-heading"><div><span>THE BAKERY STORY</span><h2>Ten stops, one growing mind</h2></div><strong>{journeyProgress} / {journeyNodes.length} ★</strong></div>
+            <div className="map-path" aria-label="Magic Math Story level path">{journeyNodes.map((node, index) => { const completed = index < journeyProgress; const current = index === journeyProgress || (journeyProgress === journeyNodes.length && index === journeyNodes.length - 1); return <button key={node.title} className={`path-stop ${node.color} ${completed ? "completed" : ""} ${current ? "current" : ""}`} onClick={() => startGame(index + 1)} disabled={!completed && !current} aria-label={`${node.title}, ${node.skill}, ${completed ? "completed, replay level" : current ? "current level, play now" : "locked"}`}><span>{completed ? "✓" : node.icon}</span><div><small>LEVEL {index + 1} · {node.orders} ORDERS</small><strong>{node.title}</strong><small>{node.skill}</small></div>{(completed || current) && <i>{completed ? "↻" : "▶"}</i>}{!completed && !current && <i>🔒</i>}</button>; })}</div>
           </div>
-          <aside className="mission-dock journey-guide"><div className="chef-welcome"><span aria-hidden="true">👩🏽‍🍳</span><div><small>YOUR NEXT STOP</small><strong>{journeyProgress === journeyNodes.length ? "Replay any colourful stop!" : journeyNodes[journeyProgress].title}</strong></div></div><div className="starter-badge"><span>🌱</span><strong>Made for beginners</strong><small>Only + and − · five food cards · gentle number growth</small></div><button className="primary-button mission-start" onClick={() => startGame()}><span>▶</span>{journeyProgress === journeyNodes.length ? "Replay from the start" : "Play the glowing level"}</button><div className="mini-legend"><span><i className="done" />Complete</span><span><i className="now" />Current</span><span><i className="later" />Locked</span></div></aside>
+          <aside className="mission-dock journey-guide"><div className="chef-welcome"><span aria-hidden="true">👩🏽‍🍳</span><div><small>YOUR NEXT STOP</small><strong>{journeyProgress === journeyNodes.length ? "Every stop is open — choose any!" : journeyNodes[journeyProgress].title}</strong></div></div><div className="next-stop-preview"><span>{journeyProgress === journeyNodes.length ? "🏆" : journeyNodes[journeyProgress].icon}</span><small>{journeyProgress === journeyNodes.length ? "Story complete" : journeyNodes[journeyProgress].skill}</small></div><div className="mini-legend"><span><i className="done" />Complete</span><span><i className="now" />Current</span><span><i className="later" />Locked</span></div></aside>
         </div>
       </section>}
 
       {phase === "playing" && (
         <section className={`play-area ${celebrating ? "is-celebrating" : ""}`} aria-live="polite">
-          <div className="hud">
+          <div className={`hud ${mode === "lab" ? "hud-lab" : ""}`}>
             <button className="exit-button" onClick={finishOrExit} aria-label={sessionLevel === "endless" && ordersServed > 0 ? "Finish the endless shift and view results" : "Exit the current game and return to the main menu"}>{sessionLevel === "endless" && ordersServed > 0 ? "✓ Finish shift" : "← Exit to menu"}</button>
             <div className="hud-stat"><span>COINS</span><strong>★ {score}</strong></div>
             <div className="progress-wrap">
               <div className="progress-label"><span>{titleForMode.toUpperCase()} · ORDER {round}{totalOrders === null ? " · ENDLESS" : ` OF ${totalOrders}`}</span><span>{totalOrders === null ? "∞" : `${Math.round(progress)}%`}</span></div>
               <div className="progress-track"><div style={{ width: `${progress}%` }} /></div>
             </div>
-            {mode === "lab"
-              ? <div className="hud-stat timer"><span>OVEN MOVES</span><strong>⚖ {labMoves} / {labPuzzle.moves}</strong></div>
-              : <div className={`hud-stat timer ${orderTimeLeft <= 5 ? "urgent" : ""}`}><span>{orderTimeLeft >= 0 ? "BONUS TIME" : "OVERTIME"}</span><strong>◷ {Math.abs(orderTimeLeft)}s</strong></div>}
+            {mode === "lab" && <div className="hud-stat timer"><span>OVEN MOVES</span><strong>⚖ {labMoves} / {labPuzzle.moves}</strong></div>}
           </div>
 
           <div className={`order-stage dish-${dishStage}`}>
             <div className="customer-card"><div className="customer-face" aria-hidden="true">{dishStage === "delivering" ? "😋" : ["🧒🏽", "👧🏻", "👦🏾", "👧🏼", "🧒🏻"][(round - 1) % 5]}</div><div><span>CUSTOMER</span><strong>{mode === "lab" ? customers[(round + 1) % customers.length] : order.customer}</strong></div></div>
-            <div className="speech-bubble">{mode === "lab" ? <><p>My magic oven is tilting!</p><div className="target-line">Make both baking pans level</div><small>No equation needed — read the movement and balance the ingredients.</small></> : <><p>{order.request}</p><div className="target-line">Make my treat equal <strong>{order.target}</strong></div><small>{order.challenge}</small></>}</div>
+            {mode === "lab" ? <div className="speech-bubble"><p>My magic oven is tilting!</p><div className="target-line">Make both baking pans level</div><small>No equation needed — read the movement and balance the ingredients.</small></div> : mode === "adventure" ? <div className="story-order-shelf"><div className="story-order-heading"><span>BAKERY ORDERS · {completedDishes.length} COMPLETE</span><small>Next order always starts here ↓</small></div><div className={`story-order-track ${storyCardDeparting ? "advancing" : ""}`}>{storyDeck.slice(round - 1).map((mission, offset) => { const index = round - 1 + offset; const complete = index < completedDishes.length; const active = offset === 0; const departing = active && storyCardDeparting; return <div key={`${storyLevel}-${index}`} className={`story-target-card ${complete ? "complete" : ""} ${active ? "active" : ""} ${departing ? "departing" : ""} ${complete && active && answerFeedback === "correct" && foundRecipes.length === 1 ? "just-completed" : ""}`} aria-label={`Order ${index + 1}, ${dishes[index % dishes.length]}, target ${mission.target}${complete ? ", completed" : active ? ", current" : ""}`}><span>{dishes[index % dishes.length]}</span><strong>{mission.target}</strong><small>{complete ? "✓ BAKED" : `ORDER ${index + 1}`}</small></div>; })}</div></div> : <div className="speech-bubble"><p>{order.request}</p><div className="target-line">Make my treat equal <strong>{order.target}</strong></div><small>{order.challenge}</small></div>}
             <div className={`combo-badge ${combo > 1 ? "active" : ""}`}><span>COMBO</span><strong>×{Math.max(combo, 1)}</strong></div>
-            {(dishStage === "plated" || dishStage === "delivering") && <div className="dish-delivery" aria-live="polite"><span>{dishes[(round - 1) % dishes.length]}</span><small>{dishStage === "plated" ? "FRESHLY PLATED" : "DELIVERING!"}</small></div>}
+            {mode !== "adventure" && (dishStage === "plated" || dishStage === "delivering") && <div className="dish-delivery" aria-live="polite"><span>{dishes[(round - 1) % dishes.length]}</span><small>{dishStage === "plated" ? "FRESHLY PLATED" : "DELIVERING!"}</small></div>}
           </div>
 
           <div className="workbench">
-            {tutorialStep !== null && mode === "adventure" && <div className="tutorial-ribbon" role="status"><span className="tutorial-chef">👩🏽‍🍳</span><div><small>YOUR FIRST RECIPE · STEP {tutorialStep === 0 ? 1 : tutorialStep === 2 ? 2 : 3} OF 3</small><strong>{tutorialStep === 0 ? "Drag number 2 into the recipe bar" : tutorialStep === 2 ? "+ is automatic — now drag number 3" : "Perfect — check your recipe!"}</strong><p>{tutorialStep < 3 ? "You can also tap the glowing tile." : "2 + 3 makes the customer’s target: 5."}</p></div><div className="tutorial-dots">{[0, 2, 3].map((step) => <i key={step} className={step <= tutorialStep ? "active" : ""} />)}</div></div>}
+            {tutorialStep !== null && mode === "adventure" && <div className="tutorial-ribbon" role="status"><span className="tutorial-chef">👩🏽‍🍳</span><div><small>YOUR FIRST RECIPE · STEP {tutorialStep === 0 ? 1 : tutorialStep === 2 ? 2 : 3} OF 3</small><strong>{tutorialStep === 0 ? "Drag number 2 into the recipe bar" : tutorialStep === 2 ? "+ is automatic — now drag number 3" : "Great — now tap Check recipe!"}</strong><p>{tutorialStep < 3 ? "You can also tap the glowing tile." : "A correct recipe flies into your Recipe Book."}</p></div><div className="tutorial-dots">{[0, 2, 3].map((step) => <i key={step} className={step <= tutorialStep ? "active" : ""} />)}</div></div>}
             {mode === "lab" ? (
               <div className="lab-layout">
                 <div className="balance-game">
@@ -1079,9 +1282,9 @@ export default function Home() {
             ) : (
             <div className="builder-layout">
               <div className="builder-main">
-                <div className={`expression-board ${dragItem && dragItem.kind !== "lab" ? "drop-ready" : ""}`} data-drop-zone="expression">
+                <div className={`expression-board ${mode === "adventure" ? "story-expression" : ""} feedback-${answerFeedback} ${dragItem && dragItem.kind !== "lab" ? "drop-ready" : ""}`} data-drop-zone="expression">
                   <div><span>YOUR RECIPE · DROP HERE</span><div className="expression-slots">{tokens.length ? tokens.map((token, index) => <b key={token.kind === "number" ? token.id : `${token.value}-${index}`} className={token.kind}>{token.value}</b>) : <em>Drag a number here to begin</em>}</div></div>
-                  <div className={`value-orb ${currentValue === order.target ? "exact" : ""}`}><span>VALUE</span><strong>{currentValue === null ? "?" : Number(currentValue.toFixed(2))}</strong></div>
+                  {mode === "adventure" ? <><button className={`value-orb check-orb ${storyCanCheck ? "ready" : ""} ${answerFeedback !== "idle" ? `is-${answerFeedback}` : ""} ${tutorialStep === 3 ? "tutorial-target" : ""}`} onClick={() => checkRecipe()} disabled={!storyCanCheck} aria-label={storyCanCheck ? "Check this recipe" : recipeSolved ? "Recipe checked" : "Finish a valid expression to check it"}><span>{answerFeedback === "wrong" ? "TRY AGAIN" : recipeSolved ? "CHECKED" : storyCanCheck ? "CHECK" : "ADD MORE"}</span><strong>{answerFeedback === "wrong" ? "↻" : recipeSolved || storyCanCheck ? "✓" : "?"}</strong></button><div className="story-expression-actions"><button className="find-way-inline" onClick={findAnotherWay} disabled={!recipeSolved || !foundRecipes.length}>Find another way</button>{foundRecipes.length > 0 && round < (totalOrders ?? 1) && <button className="go-next-inline" onClick={goToNextStoryOrder}>Go to next →</button>}</div></> : <div className={`value-orb ${currentValue === order.target ? "exact" : ""} ${answerFeedback !== "idle" ? `is-${answerFeedback}` : ""}`}><span>{answerFeedback === "correct" ? "CHECK" : answerFeedback === "wrong" ? "TRY AGAIN" : "VALUE"}</span><strong>{answerFeedback === "correct" ? "✓" : answerFeedback === "wrong" ? "✕" : currentValue === null ? "?" : Number(currentValue.toFixed(2))}</strong></div>}
                 </div>
                 <div className="builder-actions"><button onClick={undoToken} disabled={!tokens.length || recipeSolved}><span>↶</span> Undo last</button><button onClick={clearExpression} disabled={!tokens.length || recipeSolved}><span>✕</span> Clear all</button><small>Tap the last selected card to undo it</small></div>
 
@@ -1101,12 +1304,11 @@ export default function Home() {
               </div>
 
               <aside className="recipe-book" aria-label="Discovered recipes">
-                <div className="book-title"><span>RECIPE BOOK</span><strong>{foundRecipes.length} discovered</strong></div>
+                <div className="book-title"><span>RECIPE BOOK</span><strong>{mode === "adventure" ? `${completedDishes.length} orders · ${bakedRecipes.length} recipes` : `${foundRecipes.length} discovered`}</strong></div>
                 <div className="recipe-list">
-                  {foundRecipes.length === 0 && <div className="empty-recipe"><span>☆</span><p>Your first correct expression will be saved here.</p></div>}
-                  {foundRecipes.map((recipe) => <div className="saved-recipe" key={recipe.signature}><span>★</span><div><small>{recipe.category}</small><strong>{recipe.expression} = {order.target}</strong></div><i>+{recipe.points}</i></div>)}
+                  {mode === "adventure" ? <>{bakedRecipes.length === 0 && <div className="empty-recipe"><span>☆</span><p>Your first correct recipe will land here.</p></div>}<div className="dish-summary">{Object.entries(bakedRecipeCounts).map(([dish, count]) => <div key={dish}><span>{dish}</span><strong>×{count}</strong></div>)}</div></> : <>{foundRecipes.length === 0 && <div className="empty-recipe"><span>☆</span><p>Your first correct expression will be saved here.</p></div>}{foundRecipes.map((recipe) => <div className="saved-recipe" key={recipe.signature}><span>★</span><div><small>{recipe.category}</small><strong>{recipe.expression} = {order.target}</strong></div><i>+{recipe.points}</i></div>)}</>}
                 </div>
-                <div className="strategy-hints"><span>TRY A NEW STRUCTURE</span><div>{["Pair", "3+ cards", "Subtract", "Multiply", "Divide", "Mixed"].map((label) => <i key={label}>{label}</i>)}</div></div>
+                {mode !== "adventure" && <div className="strategy-hints"><span>TRY A NEW STRUCTURE</span><div>{["Pair", "3+ cards", "Subtract", "Multiply", "Divide", "Mixed"].map((label) => <i key={label}>{label}</i>)}</div></div>}
               </aside>
             </div>
             )}
@@ -1114,12 +1316,13 @@ export default function Home() {
             <div className={`coach-bar ${messageTone}`}>
               <div className="coach-icon" aria-hidden="true">👩🏽‍🍳</div><div><span>CHEF MIRA SAYS</span><p>{message}</p></div>
               <div className="coach-buttons">
-                {mode !== "lab" && !recipeSolved && <>
+                {mode === "practice" && !recipeSolved && <>
                   {foundRecipes.length > 0 && <button className="secondary-button" onClick={finishExploring}>Finish exploring →</button>}
-                  <button className={`serve-button ${tutorialStep === 3 ? "tutorial-target" : ""}`} onClick={checkRecipe} disabled={!tokens.length}>Check recipe</button>
+                  <button className="serve-button" onClick={() => checkRecipe()} disabled={!tokens.length}>Check recipe</button>
                 </>}
-                {recipeSolved && dishStage === "ready" && mode !== "lab" && <><button className="secondary-button" onClick={findAnotherWay}>Find another way</button><button className="serve-button" onClick={bakeDish}>Bake this dish →</button></>}
-                {recipeSolved && dishStage === "plated" && <button className="serve-button deliver-button" onClick={deliverOrder}>Deliver order →</button>}
+                {mode === "adventure" && recipeSolved && completedDishes.length === totalOrders && <button className="serve-button submit-level" onClick={submitStoryLevel}>Submit level ✓</button>}
+                {recipeSolved && dishStage === "ready" && mode === "practice" && <><button className="secondary-button" onClick={findAnotherWay}>Find another way</button><button className="serve-button" onClick={bakeDish}>Bake this dish →</button></>}
+                {recipeSolved && dishStage === "plated" && mode !== "adventure" && <button className="serve-button deliver-button" onClick={deliverOrder}>Deliver order →</button>}
                 {dishStage === "delivering" && <strong className="delivery-status">Order on its way!</strong>}
               </div>
             </div>
@@ -1130,15 +1333,15 @@ export default function Home() {
 
       {phase === "finished" && (
         <section className="result-card" aria-labelledby="result-title">
-          <div className="result-stars" aria-hidden="true">✦ ★ ✦</div><p className="section-kicker">SHIFT COMPLETE</p><h1 id="result-title">Your thinking made the bakery sparkle.</h1>
+          <div className="result-stars" aria-hidden="true">✦ ★ ✦</div><p className="section-kicker">{mode === "adventure" ? "STORY LEVEL COMPLETE" : "SHIFT COMPLETE"}</p><h1 id="result-title">{mode === "adventure" ? `${journeyNodes[storyLevel - 1].title} is baked!` : "Your thinking made the bakery sparkle."}</h1>
           <div className="score-medal"><span>TOTAL COINS</span><strong>{score}</strong></div>
           <div className="result-stats"><div><span>Orders served</span><strong>{ordersServed}{totalOrders === null ? "" : ` / ${totalOrders}`}</strong></div><div><span>Best combo</span><strong>×{Math.max(bestCombo, 1)}</strong></div><div><span>Fastest recipe</span><strong>{fastestOrder ?? "—"}s</strong></div><div><span>Strategies found</span><strong>{Object.values(strategyCounts).reduce((sum, value) => sum + value, 0)}</strong></div></div>
           <div className="thinking-report"><span>YOUR THINKING REPORT</span>{topStrategies.length ? topStrategies.map(([strategy, count]) => <div key={strategy}><strong>{strategy}</strong><span>{count} recipe{count > 1 ? "s" : ""}</span></div>) : <p>Try another shift to fill your strategy report.</p>}</div>
-          <div className="result-actions"><button className="secondary-button" onClick={() => setPhase("modes")}>Change mode</button><button className="primary-button" onClick={() => startGame()}>Play again <span>↻</span></button></div>
+          <div className="result-actions">{mode === "adventure" ? <><button className="secondary-button" onClick={() => setPhase("journey")}>Story Map</button><button className="secondary-button replay-level-button" onClick={() => startGame(storyLevel)}>Play Again</button>{storyLevel < journeyNodes.length && <button className="primary-button next-level-button" onClick={() => startGame(storyLevel + 1)}>Next Level</button>}</> : <><button className="secondary-button" onClick={() => setPhase("modes")}>Change mode</button><button className="primary-button" onClick={() => startGame()}>Play again <span>↻</span></button></>}</div>
         </section>
       )}
 
-      {phase !== "splash" && <footer><span>Educational game prototype · P0.2</span><span>Music: First Light Particles by Yoiyami · CC0</span></footer>}
+      {phase !== "splash" && <footer><span>Educational game prototype · P0.3 local preview</span><span>Music: First Light Particles by Yoiyami · CC0</span></footer>}
     </main>
   );
 }
