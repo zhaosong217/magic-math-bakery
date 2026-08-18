@@ -36,6 +36,11 @@ test("P0.4 includes shared Story and Practice interaction, settings, lab play, a
   assert.match(source, /musicVolumeFromPercent/);
   assert.match(source, /magic-math-volume-percent/);
   assert.match(source, /type="range" min="0" max="100"/);
+  assert.match(source, /createMediaElementSource/);
+  assert.match(source, /musicGainRef/);
+  assert.match(source, /syncVolumeAcrossTabs/);
+  assert.match(source, /onInput=/);
+  assert.doesNotMatch(source, /<i>Go!<\/i>/);
   assert.match(source, /Reset progress/);
   assert.match(source, /resetStoryProgress/);
   assert.match(source, /HOW MANY QUIZ\?/);

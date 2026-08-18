@@ -456,6 +456,8 @@ export default function Home() {
   const [labMotion, setLabMotion] = useState(0);
   const audioRef = useRef<AudioContext | null>(null);
   const musicRef = useRef<HTMLAudioElement | null>(null);
+  const musicSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const musicGainRef = useRef<GainNode | null>(null);
   const celebrationTimerRef = useRef<number | null>(null);
   const storyCardTimerRef = useRef<number | null>(null);
   const seenLabPuzzlesRef = useRef<Set<string>>(new Set());
@@ -521,17 +523,42 @@ export default function Home() {
     musicRef.current?.pause();
   }, []);
 
-  const playMusic = useCallback(() => {
-    if (!soundOn) return;
+  const ensureMusic = useCallback(() => {
+    const context = ensureAudio();
+    if (!context) return null;
     if (!musicRef.current) {
       const music = new Audio("/audio/first-light-particles.ogg");
       music.loop = true;
-      music.volume = musicVolumeFromPercent(volumePercent);
+      music.volume = 1;
       musicRef.current = music;
     }
-    musicRef.current.volume = musicVolumeFromPercent(volumePercent);
-    void musicRef.current.play().catch(() => undefined);
-  }, [soundOn, volumePercent]);
+    if (!musicSourceRef.current || !musicGainRef.current) {
+      const source = context.createMediaElementSource(musicRef.current);
+      const gain = context.createGain();
+      source.connect(gain).connect(context.destination);
+      musicSourceRef.current = source;
+      musicGainRef.current = gain;
+    }
+    return musicRef.current;
+  }, [ensureAudio]);
+
+  const applyMusicVolume = useCallback((percent: number, smooth = true) => {
+    const context = audioRef.current;
+    const gain = musicGainRef.current;
+    if (!context || !gain) return;
+    const nextGain = musicVolumeFromPercent(percent);
+    gain.gain.cancelScheduledValues(context.currentTime);
+    if (smooth) gain.gain.setTargetAtTime(nextGain, context.currentTime, 0.025);
+    else gain.gain.setValueAtTime(nextGain, context.currentTime);
+  }, []);
+
+  const playMusic = useCallback(() => {
+    if (!soundOn) return;
+    const music = ensureMusic();
+    if (!music) return;
+    applyMusicVolume(volumePercent, false);
+    void music.play().catch(() => undefined);
+  }, [applyMusicVolume, ensureMusic, soundOn, volumePercent]);
 
   const startMusic = useCallback(() => {
     if (phase !== "playing") return;
@@ -551,14 +578,26 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (musicRef.current) musicRef.current.volume = musicVolumeFromPercent(volumePercent);
-  }, [volumePercent]);
+    applyMusicVolume(volumePercent);
+  }, [applyMusicVolume, volumePercent]);
 
   useEffect(() => {
     const stored = Number(window.localStorage.getItem("magic-math-journey") ?? 0);
     if (!Number.isFinite(stored)) return;
     const timer = window.setTimeout(() => setJourneyProgress(Math.min(journeyNodes.length, Math.max(0, stored))), 0);
     return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    function syncVolumeAcrossTabs(event: StorageEvent) {
+      if (event.key !== "magic-math-volume-percent" || event.newValue === null) return;
+      const nextPercent = Number(event.newValue);
+      if (Number.isFinite(nextPercent) && nextPercent >= 0 && nextPercent <= 100) {
+        setVolumePercent(nextPercent);
+      }
+    }
+    window.addEventListener("storage", syncVolumeAcrossTabs);
+    return () => window.removeEventListener("storage", syncVolumeAcrossTabs);
   }, []);
 
   useEffect(() => {
@@ -571,6 +610,10 @@ export default function Home() {
       stopMusic();
       if (celebrationTimerRef.current !== null) window.clearTimeout(celebrationTimerRef.current);
       if (storyCardTimerRef.current !== null) window.clearTimeout(storyCardTimerRef.current);
+      musicSourceRef.current?.disconnect();
+      musicGainRef.current?.disconnect();
+      musicSourceRef.current = null;
+      musicGainRef.current = null;
       musicRef.current = null;
       const audioContext = audioRef.current;
       audioRef.current = null;
@@ -599,15 +642,9 @@ export default function Home() {
     window.localStorage.setItem("magic-math-sound", nextPercent > 0 ? "on" : "off");
     if (nextPercent === 0) stopMusic();
     else {
-      ensureAudio();
-      if (!musicRef.current) {
-        const music = new Audio("/audio/first-light-particles.ogg");
-        music.loop = true;
-        music.volume = musicVolumeFromPercent(nextPercent);
-        musicRef.current = music;
-      }
-      musicRef.current.volume = musicVolumeFromPercent(nextPercent);
-      if (phase === "playing") void musicRef.current.play().catch(() => undefined);
+      const music = ensureMusic();
+      applyMusicVolume(nextPercent);
+      if (phase === "playing" && music) void music.play().catch(() => undefined);
     }
   }
 
@@ -715,14 +752,9 @@ export default function Home() {
   function startGame(forcedStoryLevel?: number) {
     ensureAudio();
     if (soundOn) {
-      if (!musicRef.current) {
-        const music = new Audio("/audio/first-light-particles.ogg");
-        music.loop = true;
-        music.volume = musicVolumeFromPercent(volumePercent);
-        musicRef.current = music;
-      }
-      musicRef.current.volume = musicVolumeFromPercent(volumePercent);
-      void musicRef.current.play().catch(() => undefined);
+      const music = ensureMusic();
+      applyMusicVolume(volumePercent, false);
+      if (music) void music.play().catch(() => undefined);
     }
     const selectedStoryLevel = forcedStoryLevel ?? (journeyProgress < journeyNodes.length ? journeyProgress + 1 : 1);
     setRound(1);
@@ -1144,7 +1176,7 @@ export default function Home() {
         <section className="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
           <button className="settings-close" onClick={() => setSettingsOpen(false)} aria-label="Close settings">×</button>
           <p className="section-kicker">YOUR BAKERY</p><h2 id="settings-title">Settings</h2>
-          <div className="volume-setting"><div><strong>Music volume</strong><small>{volumePercent === 0 ? "Muted" : `${volumePercent} / 100`}</small></div><div className="volume-slider"><div><span>0</span><strong>{volumePercent}</strong><span>100</span></div><input type="range" min="0" max="100" step="1" value={volumePercent} onChange={(event) => changeVolume(Number(event.target.value))} aria-label="Music volume from 0 to 100" /></div></div>
+          <div className="volume-setting"><div><strong>Music volume</strong><small>{volumePercent === 0 ? "Muted" : `${volumePercent} / 100`}</small></div><div className="volume-slider"><div><span>0</span><strong>{volumePercent}</strong><span>100</span></div><input type="range" min="0" max="100" step="1" value={volumePercent} onInput={(event) => changeVolume(Number(event.currentTarget.value))} onChange={(event) => changeVolume(Number(event.currentTarget.value))} aria-label="Music volume from 0 to 100" /></div></div>
           <div className="reset-setting"><div><strong>Story progress</strong><small>Start the ten-level Story again from the beginning.</small></div><button className={resetConfirm ? "confirming" : ""} onClick={resetStoryProgress}>{resetConfirm ? "Tap again to reset" : "Reset progress"}</button></div>
         </section>
       </div>}
@@ -1152,9 +1184,9 @@ export default function Home() {
       {phase === "modes" && <section className="mode-select-home" aria-labelledby="mode-title">
         <div className="mode-select-intro"><p className="section-kicker">CHOOSE HOW TO PLAY</p><h1 id="mode-title">Where shall we grow today?</h1><p>Pick one big activity. You can always return here and choose another.</p></div>
         <div className="big-mode-grid">
-          <button className="big-mode-card journey-choice" onClick={() => { setMode("adventure"); setPhase("journey"); }}><span>📖</span><div><small>FOLLOW THE PATH</small><strong>Story</strong><p>Grow from tiny sums to place-value challenges.</p></div><i>Go!</i></button>
-          <button className={`big-mode-card practice-choice ${mode === "practice" ? "selected" : ""}`} onClick={() => setMode("practice")}><span>🧠</span><div><small>TRAIN YOUR BRAIN</small><strong>Practice</strong><p>Pick one or more signs and build number recipes.</p></div><i>Go!</i></button>
-          <button className={`big-mode-card balance-choice ${mode === "lab" ? "selected" : ""}`} onClick={() => setMode("lab")}><span>⚖️</span><div><small>PUZZLE PLAY</small><strong>Balance</strong><p>Move small food groups until both oven pans match.</p></div><i>Go!</i></button>
+          <button className="big-mode-card journey-choice" onClick={() => { setMode("adventure"); setPhase("journey"); }}><span>📖</span><div><small>FOLLOW THE PATH</small><strong>Story</strong><p>Grow from tiny sums to place-value challenges.</p></div></button>
+          <button className={`big-mode-card practice-choice ${mode === "practice" ? "selected" : ""}`} onClick={() => setMode("practice")}><span>🧠</span><div><small>TRAIN YOUR BRAIN</small><strong>Practice</strong><p>Pick one or more signs and build number recipes.</p></div></button>
+          <button className={`big-mode-card balance-choice ${mode === "lab" ? "selected" : ""}`} onClick={() => setMode("lab")}><span>⚖️</span><div><small>PUZZLE PLAY</small><strong>Balance</strong><p>Move small food groups until both oven pans match.</p></div></button>
         </div>
         {(mode === "practice" || mode === "lab") && <div className={`mode-setup-panel ${mode === "practice" ? "practice-setup" : ""}`}>
           <div className="chef-welcome"><span aria-hidden="true">👩🏽‍🍳</span><div><small>CHEF MIRA SAYS</small><strong>{mode === "practice" ? "Choose the signs you already know." : "We will begin with tiny weights and only a few foods."}</strong></div></div>
