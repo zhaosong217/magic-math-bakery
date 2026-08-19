@@ -474,6 +474,11 @@ export default function Home() {
     && tokens.filter((token) => token.kind === "number").length >= 2
     && tokens.filter((token) => token.kind === "operator").length >= 1;
   const storyCanCheck = mode !== "lab" && storyExpressionIsLegal && !recipeSolved;
+  const canSubmitRecipeSession = mode !== "lab" && (
+    totalOrders === null
+      ? completedDishes.length > 0
+      : completedDishes.length === totalOrders
+  );
   const usedCardIds = tokens
     .filter((token): token is Extract<Token, { kind: "number" }> => token.kind === "number")
     .map((token) => token.id);
@@ -1068,6 +1073,15 @@ export default function Home() {
   function advanceStoryOrder() {
     if (mode === "lab" || !foundRecipes.length || (totalOrders !== null && round >= totalOrders)) return;
     const nextRound = round + 1;
+    if (mode === "practice" && totalOrders === null) {
+      const nextOrder = createPracticeOrder(storyDeck.length + 1, practiceOperators, journeyProgress);
+      const nextDeck = [...storyDeck, nextOrder];
+      setStoryDeck(nextDeck);
+      setRound(nextRound);
+      resetOrder(nextDeck[nextRound - 1]);
+      playTone([659, 784], 0.14, 0.04);
+      return;
+    }
     if (mode === "practice" && !storyDeck[nextRound - 1]) {
       const nextOrder = createPracticeOrder(nextRound, practiceOperators, journeyProgress);
       setStoryDeck((current) => [...current, nextOrder]);
@@ -1099,7 +1113,7 @@ export default function Home() {
   }
 
   function submitStoryLevel() {
-    if (mode === "lab" || totalOrders === null || completedDishes.length !== totalOrders) return;
+    if (!canSubmitRecipeSession) return;
     if (mode === "adventure") {
       const nextProgress = Math.max(journeyProgress, storyLevel);
       setJourneyProgress(nextProgress);
@@ -1202,7 +1216,7 @@ export default function Home() {
         <div className="journey-layout">
           <div className="journey-map">
             <div className="map-heading"><div><span>THE BAKERY STORY</span><h2>Ten stops, one growing mind</h2></div><strong>{journeyProgress} / {journeyNodes.length} ★</strong></div>
-            <div className="map-path" aria-label="Magic Math Story level path">{journeyNodes.map((node, index) => { const completed = index < journeyProgress; const current = index === journeyProgress || (journeyProgress === journeyNodes.length && index === journeyNodes.length - 1); return <button key={node.title} className={`path-stop ${node.color} ${completed ? "completed" : ""} ${current ? "current" : ""}`} onClick={() => startGame(index + 1)} disabled={!completed && !current} aria-label={`${node.title}, ${node.skill}, ${completed ? "completed, replay level" : current ? "current level, play now" : "locked"}`}><span>{completed ? "✓" : node.icon}</span><div><small>LEVEL {index + 1} · {node.orders} ORDERS</small><strong>{node.title}</strong><small>{node.skill}</small></div>{(completed || current) && <i>{completed ? "↻" : "▶"}</i>}{!completed && !current && <i>🔒</i>}</button>; })}</div>
+            <div className="map-path" aria-label="Magic Math Story level path">{journeyNodes.map((node, index) => { const completed = index < journeyProgress; const current = journeyProgress < journeyNodes.length && index === journeyProgress; return <button key={node.title} className={`path-stop ${node.color} ${completed ? "completed" : ""} ${current ? "current" : ""}`} onClick={() => startGame(index + 1)} disabled={!completed && !current} aria-label={`${node.title}, ${node.skill}, ${completed ? "completed, replay level" : current ? "current level, play now" : "locked"}`}><span>{completed ? "✓" : node.icon}</span><div><small>LEVEL {index + 1} · {node.orders} ORDERS</small><strong>{node.title}</strong><small>{node.skill}</small></div>{(completed || current) && <i>{completed ? "↻" : "▶"}</i>}{!completed && !current && <i>🔒</i>}</button>; })}</div>
           </div>
           <aside className="mission-dock journey-guide"><div className="chef-welcome"><span aria-hidden="true">👩🏽‍🍳</span><div><small>YOUR NEXT STOP</small><strong>{journeyProgress === journeyNodes.length ? "Every stop is open — choose any!" : journeyNodes[journeyProgress].title}</strong></div></div><div className="next-stop-preview"><span>{journeyProgress === journeyNodes.length ? "🏆" : journeyNodes[journeyProgress].icon}</span><small>{journeyProgress === journeyNodes.length ? "Story complete" : journeyNodes[journeyProgress].skill}</small></div><div className="mini-legend"><span><i className="done" />Complete</span><span><i className="now" />Current</span><span><i className="later" />Locked</span></div></aside>
         </div>
@@ -1297,7 +1311,7 @@ export default function Home() {
             <div className={`coach-bar ${messageTone}`}>
               <div className="coach-icon" aria-hidden="true">👩🏽‍🍳</div><div><span>CHEF MIRA SAYS</span><p>{message}</p></div>
               <div className="coach-buttons">
-                {mode !== "lab" && recipeSolved && totalOrders !== null && completedDishes.length === totalOrders && <button className="serve-button submit-level" onClick={submitStoryLevel}>Submit ✓</button>}
+                {canSubmitRecipeSession && <button className="serve-button submit-level" onClick={submitStoryLevel}>Submit ✓</button>}
               </div>
             </div>
           </div>

@@ -30,6 +30,7 @@ test("server-renders the P0.4 Magic Math Bakery opening screen", async () => {
 
 test("P0.4 includes shared Story and Practice interaction, settings, lab play, and safe exits", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(source, /Exit to menu/);
   assert.match(source, /first-light-particles\.ogg/);
   assert.match(source, /order\.operators\.length === 1/);
@@ -70,6 +71,11 @@ test("P0.4 includes shared Story and Practice interaction, settings, lab play, a
   assert.match(source, /bakedRecipeCounts/);
   assert.match(source, /bakedRecipes/);
   assert.match(source, /Submit ✓/);
+  assert.match(source, /canSubmitRecipeSession/);
+  assert.match(source, /totalOrders === null\s*\? completedDishes\.length > 0/);
+  assert.match(source, /storyDeck\.length \+ 1/);
+  assert.match(source, /journeyProgress < journeyNodes\.length && index === journeyProgress/);
+  assert.match(styles, /\.check-orb\.is-correct\s*\{[^}]*animation:none/);
   assert.match(source, /Story Map/);
   assert.match(source, /Play Again/);
   assert.match(source, /startGame\(storyLevel\)/);

@@ -447,6 +447,7 @@ footer { display:flex; justify-content:space-between; margin-top:15px; color:rgb
 .story-expression-actions button:disabled { opacity:.38; cursor:not-allowed; }
 .story-expression-actions .go-next-inline { color:#fff; border-color:var(--teal); background:var(--teal); box-shadow:0 3px 0 var(--teal-dark); }
 .value-orb.is-correct { background:#55a566; animation:check-flash .55s ease-in-out infinite alternate; }
+.check-orb.is-correct { animation:none; transform:none; filter:none; }
 .value-orb.is-wrong { background:#d94f3d; transform:scale(1.06); }
 .dish-summary { display:grid; grid-template-columns:repeat(2,1fr); gap:9px; }
 .dish-summary>div { display:flex; align-items:center; justify-content:center; gap:8px; min-height:74px; border:2px solid #e3d3b4; border-radius:14px; background:rgba(255,255,255,.82); animation:dish-pop .45s both; }
